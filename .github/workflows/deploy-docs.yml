@@ -6,7 +6,6 @@ on:
       - main
       - U1_JP #TODO: remove this branch after testing
     paths:
-      - 'user-service/openapi.yaml'
       - 'docs/**'
   workflow_dispatch:
 
@@ -25,10 +24,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Copy OpenAPI spec to docs
-        run: |
-          cp user-service/openapi.yaml docs/openapi.yaml
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
