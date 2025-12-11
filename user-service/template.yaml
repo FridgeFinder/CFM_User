@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  user-service
+
+  User Service with DynamoDB and HTTP APIs for user management
+
+Globals:
+  Function:
+    Timeout: 60
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        USERS_TABLE: !Sub users_${Environment}
+        FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
+        DEPLOYMENT_TARGET: !Ref DeploymentTarget
+    LoggingConfig:
+      LogFormat: JSON
+
+Parameters:
+  FirebaseProjectId:
+    Type: String
+    Description: Firebase Project ID for JWT validation
+    Default: "your-firebase-project-id"
+  
+  Environment:
+    Type: String
+    Description: Deployment environment (dev, staging, prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  
+  DeploymentTarget:
+    Type: String
+    Description: Choose between local or AWS deployment
+    Default: aws
+    AllowedValues:
+      - local
+      - aws
+  
+  CFMHostedZoneId:
+    Type: String
+    Description: Route53 Hosted Zone ID for communityfridgefinder.com
+
+Resources:
+  # SSL Certificate for custom domain
+  ApiCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+      DomainValidationOptions:
+        - DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+          HostedZoneId: !Ref CFMHostedZoneId
+      ValidationMethod: DNS
+
+  # HTTP API Custom Domain
+  ApiDomainName:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+      DomainNameConfigurations:
+        - CertificateArn: !Ref ApiCertificate
+          EndpointType: REGIONAL
+
+  # HTTP API (API Gateway v2) - Modern, faster, cheaper
+  UserHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Auth:
+        Authorizers:
+          FirebaseAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub "https://securetoken.google.com/${FirebaseProjectId}"
+              audience:
+                - !Ref FirebaseProjectId
+            IdentitySource: $request.header.Authorization
+        DefaultAuthorizer: FirebaseAuthorizer
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowOrigins:
+          - '*'
+
+  # DynamoDB Table for Users
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub users_${Environment}
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+      BillingMode: PAY_PER_REQUEST
+
+  # Map custom domain to HTTP API
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      DomainName: !Ref ApiDomainName
+      ApiId: !Ref UserHttpApi
+      Stage: !Ref UserHttpApi.Stage
+
+  # Route53 DNS Record for custom domain
+  ApiDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref CFMHostedZoneId
+      Name: !Sub users-api-${Environment}.communityfridgefinder.com
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApiDomainName.RegionalDomainName
+        HostedZoneId: !GetAtt ApiDomainName.RegionalHostedZoneId
+
+  # Health Check Lambda Function (No auth required)
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/hello_world/
+      Handler: app.lambda_handler
+      Events:
+        HelloWorld:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /hello
+            Method: get
+            Auth:
+              Authorizer: NONE  # Public endpoint for health checks
+
+  # Single Lambda Function to handle all user operations (Protected by Firebase Auth)
+  UserServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_service/
+      Handler: app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        CreateUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users
+            Method: post
+        GetUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: get
+        UpdateUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: patch
+        DeleteUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: delete
+
+  # Username Availability Check Function (Public endpoint, no auth)
+  UsernameCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/username_check/
+      Handler: app.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: !Sub "${UsersTable.Arn}/index/username-index"
+      Events:
+        CheckUsername:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/check-username/{username}
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+Outputs:
+  UsersTableName:
+    Description: DynamoDB Users Table Name
+    Value: !Ref UsersTable
+  
+  CustomDomainUrl:
+    Description: Custom domain URL for the User API
+    Value: !Sub "https://users-api-${Environment}.communityfridgefinder.com"
+  
+  HttpApiEndpoint:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub "https://${UserHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+  
+  HttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref UserHttpApi
+  
+  ApiDomainName:
+    Description: Custom domain name
+    Value: !Ref ApiDomainName
+  
+  CertificateArn:
+    Description: SSL Certificate ARN
+    Value: !Ref ApiCertificate
+  
+  HelloWorldFunctionArn:
+    Description: Hello World Health Check Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn
+  
+  UserServiceFunctionArn:
+    Description: User Service Lambda Function ARN
+    Value: !GetAtt UserServiceFunction.Arn

@@ -1,0 +1,36 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /v1/users",
+  "rawPath": "/v1/users",
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "api-id",
+    "domainName": "users-api-dev.communityfridgefinder.com",
+    "domainPrefix": "users-api-dev",
+    "http": {
+      "method": "POST",
+      "path": "/v1/users",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "192.0.2.1",
+      "userAgent": "Custom User Agent String"
+    },
+    "requestId": "id",
+    "routeKey": "POST /v1/users",
+    "stage": "dev",
+    "time": "03/Dec/2025:12:34:56 +0000",
+    "timeEpoch": 1733231696000,
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "firebase-user-123",
+          "email": "john.doe@example.com",
+          "aud": "your-firebase-project-id",
+          "iss": "https://securetoken.google.com/your-firebase-project-id"
+        },
+        "scopes": []
+      }
+    }
+  },
+  "body": "{\"userId\":\"firebase-user-123\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"username\":\"johndoe\",\"zipcode\":\"90210\",\"fcmToken\":\"fcm-token-abc123\"}",
+  "isBase64Encoded": false
+}

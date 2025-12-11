@@ -1,0 +1,102 @@
+# More information about the configuration file can be found here:
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+version = 0.1
+
+# =============================================================================
+# Development Environment
+# Usage: sam deploy --config-env dev
+# =============================================================================
+[dev.global.parameters]
+stack_name = "user-service-dev"
+
+[dev.build.parameters]
+cached = true
+parallel = true
+
+[dev.validate.parameters]
+lint = true
+
+[dev.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+region = "us-east-1"
+s3_bucket = "cfm-sam-artifacts"
+s3_prefix = "user-service/dev"
+parameter_overrides = [
+  "Environment=dev",
+  "DeploymentTarget=aws",
+  "FirebaseProjectId=YOUR_STAGING_FIREBASE_PROJECT_ID",
+  "CFMHostedZoneId=YOUR_HOSTED_ZONE_ID"
+]
+tags = [
+  "Environment=dev",
+  "Project=CFM",
+  "Service=user-service",
+  "ManagedBy=SAM"
+]
+
+# =============================================================================
+# Staging Environment
+# Usage: sam deploy --config-env staging
+# =============================================================================
+[staging.global.parameters]
+stack_name = "user-service-staging"
+
+[staging.build.parameters]
+cached = true
+parallel = true
+
+[staging.validate.parameters]
+lint = true
+
+[staging.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+region = "us-east-1"
+s3_bucket = "cfm-sam-artifacts"
+s3_prefix = "user-service/staging"
+parameter_overrides = [
+  "Environment=staging",
+  "DeploymentTarget=aws",
+  "FirebaseProjectId=YOUR_STAGING_FIREBASE_PROJECT_ID",
+  "CFMHostedZoneId=YOUR_HOSTED_ZONE_ID"
+]
+tags = [
+  "Environment=staging",
+  "Project=CFM",
+  "Service=user-service",
+  "ManagedBy=SAM"
+]
+
+# =============================================================================
+# Production Environment
+# Usage: sam deploy --config-env prod
+# =============================================================================
+[prod.global.parameters]
+stack_name = "user-service-prod"
+
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.validate.parameters]
+lint = true
+
+[prod.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+region = "us-east-1"
+s3_bucket = "cfm-sam-artifacts"
+s3_prefix = "user-service/prod"
+parameter_overrides = [
+  "Environment=prod",
+  "DeploymentTarget=aws",
+  "FirebaseProjectId=YOUR_PROD_FIREBASE_PROJECT_ID",
+  "CFMHostedZoneId=YOUR_HOSTED_ZONE_ID"
+]
+tags = [
+  "Environment=prod",
+  "Project=CFM",
+  "Service=user-service",
+  "ManagedBy=SAM"
+]

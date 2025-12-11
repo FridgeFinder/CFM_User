@@ -1,0 +1,520 @@
+openapi: 3.0.3
+info:
+  title: Community Fridge User Service API
+  description: |
+    User management API for the Community Fridge network.
+    
+    ## Authentication
+    All endpoints (except username availability check) require Firebase JWT authentication.
+    Include the JWT token in the `Authorization` header as `Bearer <token>`.
+    
+    ## User Types
+    - **Organizer**: Coordinates the fridge network
+    - **Host**: Hosts a fridge at their location
+    - **Volunteer**: Maintains, fills, and cleans fridges
+    - **Neighbor**: Uses the community fridges
+    
+  version: 1.0.0
+  contact:
+    name: Fridge Finder
+    url: https://fridgefinder.app
+
+servers:
+  - url: https://users-api-dev.communityfridgefinder.com
+    description: Development environment
+  - url: https://users-api-staging.communityfridgefinder.com
+    description: Staging environment
+  - url: https://users-api-prod.communityfridgefinder.com
+    description: Production environment
+  - url: http://localhost:3000
+    description: Local development
+
+security:
+  - FirebaseAuth: []
+
+tags:
+  - name: Users
+    description: User management operations
+  - name: Public
+    description: Public endpoints (no authentication required)
+
+paths:
+  /v1/users:
+    post:
+      tags:
+        - Users
+      summary: Create a new user
+      description: |
+        Creates a new user account. Users can only create their own profile (userId must match authenticated user).
+        New users are automatically assigned the `Neighbor` user type.
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            examples:
+              basic:
+                summary: Basic user creation
+                value:
+                  userId: "firebase-user-123"
+                  username: "johndoe"
+                  email: "john@example.com"
+              full:
+                summary: Full user profile
+                value:
+                  userId: "firebase-user-123"
+                  username: "johndoe"
+                  email: "john@example.com"
+                  phoneNumber: "+1234567890"
+                  zipcode: "12345"
+                  settings:
+                    pushNotificationEnabled: true
+                    emailNotificationEnabled: true
+                    geofenceEnabled: false
+      responses:
+        '201':
+          description: User created successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Request tracking ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/{userId}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: Retrieve user profile. Users can only access their own profile.
+      operationId: getUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - Users
+      summary: Update user profile
+      description: |
+        Partially update user profile. Users can only update their own profile.
+        Only provided fields will be updated; other fields remain unchanged.
+        
+        **User Type Transitions:**
+        - Users can change to `Neighbor` or `Volunteer` only
+        - Other transitions require admin privileges
+      operationId: updateUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            examples:
+              profile:
+                summary: Update profile fields
+                value:
+                  email: "newemail@example.com"
+                  zipcode: "54321"
+              settings:
+                summary: Update notification settings
+                value:
+                  settings:
+                    pushNotificationEnabled: false
+              volunteer:
+                summary: Become a volunteer
+                value:
+                  userType: "Volunteer"
+      responses:
+        '200':
+          description: User updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user account
+      description: Permanently delete user account. Users can only delete their own account.
+      operationId: deleteUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: User deleted successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/check-username/{username}:
+    get:
+      tags:
+        - Public
+      summary: Check username availability
+      description: |
+        Check if a username is available (not taken by another user).
+        This endpoint does not require authentication.
+      operationId: checkUsername
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          description: Username to check
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+      responses:
+        '200':
+          description: Username availability status
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - available
+                properties:
+                  available:
+                    type: boolean
+                    description: Whether the username is available
+              examples:
+                available:
+                  summary: Username is available
+                  value:
+                    available: true
+                taken:
+                  summary: Username is taken
+                  value:
+                    available: false
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase JWT token
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Unique user identifier (Firebase UID)
+      schema:
+        type: string
+        example: "firebase-user-123456"
+
+  schemas:
+    UserType:
+      type: string
+      enum:
+        - Organizer
+        - Host
+        - Volunteer
+        - Neighbor
+      description: User role in the community fridge network
+
+    Settings:
+      type: object
+      properties:
+        pushNotificationEnabled:
+          type: boolean
+          description: Enable push notifications
+          default: false
+        emailNotificationEnabled:
+          type: boolean
+          description: Enable email notifications
+          default: false
+        geofenceEnabled:
+          type: boolean
+          description: Enable geofence notifications
+          default: false
+      additionalProperties: false
+
+    User:
+      type: object
+      required:
+        - userId
+        - userType
+        - points
+        - settings
+        - createdAt
+        - lastUpdated
+        - lastLoginAt
+      properties:
+        userId:
+          type: string
+          description: Unique user identifier (Firebase UID)
+          example: "firebase-user-123456"
+        userType:
+          $ref: '#/components/schemas/UserType'
+        username:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 50
+          description: Unique username for the user
+          example: "johndoe"
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: User's email address
+          example: "john@example.com"
+        phoneNumber:
+          type: string
+          nullable: true
+          description: User's phone number
+          example: "+1234567890"
+        zipcode:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 10
+          description: User's postal/zip code (international format)
+          example: "12345"
+        fcmToken:
+          type: string
+          nullable: true
+          description: Firebase Cloud Messaging token for push notifications
+        points:
+          type: integer
+          description: User reward points
+          default: 0
+          example: 100
+        settings:
+          $ref: '#/components/schemas/Settings'
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Last profile update timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+        lastLoginAt:
+          type: string
+          format: date-time
+          description: Last login timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+
+    CreateUserRequest:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          description: Firebase UID (must match authenticated user)
+        username:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        zipcode:
+          type: string
+          nullable: true
+        fcmToken:
+          type: string
+          nullable: true
+        settings:
+          $ref: '#/components/schemas/Settings'
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        userType:
+          $ref: '#/components/schemas/UserType'
+        username:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        zipcode:
+          type: string
+          nullable: true
+        fcmToken:
+          type: string
+          nullable: true
+        points:
+          type: integer
+        settings:
+          $ref: '#/components/schemas/Settings'
+        lastLoginAt:
+          type: string
+          format: date-time
+      minProperties: 1
+
+    UserResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        errorCode:
+          type: string
+          description: Machine-readable error code
+        field:
+          type: string
+          description: Field name (for validation errors)
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validation:
+              summary: Validation error
+              value:
+                error: "Invalid email format"
+                errorCode: "VALIDATION_ERROR"
+            emptyBody:
+              summary: Empty request body
+              value:
+                error: "Request body cannot be empty"
+                errorCode: "EMPTY_REQUEST_BODY"
+
+    Forbidden:
+      description: Forbidden - User lacks permission
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "User can only access their own user data"
+            errorCode: "FORBIDDEN"
+
+    NotFound:
+      description: User not found
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "User with userId 'firebase-user-123' not found"
+            errorCode: "USER_NOT_FOUND"
+
+    Conflict:
+      description: Conflict - User already exists
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "User with this userId already exists"
+            errorCode: "USER_ALREADY_EXISTS"
+
+    InternalServerError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "An unexpected error occurred"
+            errorCode: "INTERNAL_SERVER_ERROR"
