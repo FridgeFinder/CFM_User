@@ -84,7 +84,8 @@ Resources:
         AllowMethods:
           - GET
           - POST
-          - PUT
+          - PATCH
+          - DELETE
           - OPTIONS
         AllowHeaders:
           - Content-Type
