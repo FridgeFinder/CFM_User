@@ -38,8 +38,6 @@ class UserService:
         Returns:
             API response with created user or error
         """
-        # Force userType to NEIGHBOR on creation
-        body['userType'] = UserType.NEIGHBOR
         
         # Validate with Pydantic model
         try:

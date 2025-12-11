@@ -52,8 +52,7 @@ def get_user_id_from_path(event: Dict[str, Any]) -> Tuple[Optional[str], Optiona
     user_id = path_params.get('userId')
     
     if not user_id:
-        #Should not happen, API Gateway should enforce this
-        return None, error_response(500, ErrorCode.INTERNAL_SERVER_ERROR, 'userId is required in path')
+        return None, error_response(400, ErrorCode.USER_ID_REQUIRED, 'userId is required in path')
     
     return user_id, None
 
