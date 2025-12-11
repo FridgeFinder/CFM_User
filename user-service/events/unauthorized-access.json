@@ -26,7 +26,7 @@
       "jwt": {
         "claims": {
           "sub": "firebase-user-123",
-          "email": "john.doe@example.com",
+          "email": "mariame.kaba@example.com",
           "aud": "your-firebase-project-id",
           "iss": "https://securetoken.google.com/your-firebase-project-id"
         },

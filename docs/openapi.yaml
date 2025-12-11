@@ -59,14 +59,14 @@ paths:
                 summary: Basic user creation
                 value:
                   userId: "firebase-user-123"
-                  username: "johndoe"
-                  email: "john@example.com"
+                  username: "mariamekaba"
+                  email: "mariame@example.com"
               full:
                 summary: Full user profile
                 value:
                   userId: "firebase-user-123"
-                  username: "johndoe"
-                  email: "john@example.com"
+                  username: "mariamekaba"
+                  email: "mariame@example.com"
                   phoneNumber: "+1234567890"
                   zipcode: "12345"
                   settings:
@@ -262,7 +262,6 @@ components:
       description: Unique user identifier (Firebase UID)
       schema:
         type: string
-        example: "firebase-user-123456"
 
   schemas:
     UserType:
@@ -305,7 +304,6 @@ components:
         userId:
           type: string
           description: Unique user identifier (Firebase UID)
-          example: "firebase-user-123456"
         userType:
           $ref: '#/components/schemas/UserType'
         username:
@@ -314,13 +312,13 @@ components:
           minLength: 1
           maxLength: 50
           description: Unique username for the user
-          example: "johndoe"
+          example: "mariamekaba"
         email:
           type: string
           format: email
           nullable: true
           description: User's email address
-          example: "john@example.com"
+          example: "mariame@example.com"
         phoneNumber:
           type: string
           nullable: true
