@@ -55,11 +55,7 @@ class UserService:
         except ClientError as e:
             if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
                 return error_response(409, ErrorCode.USER_ALREADY_EXISTS, 
-                                    'User with this userId already exists',
-                                    log_level='warning',
-                                    request_id=request_id,
-                                    extra={'operation': 'create_user',
-                                           'user_id': user.userId})
+                                    'User with this userId already exists')
             raise
         
         return response(201, {'user': user.model_dump(mode='json')}, request_id)
@@ -78,12 +74,7 @@ class UserService:
         # Fetch from database
         user = self.repository.get_user_by_id(user_id)
         if not user:
-            return error_response(404, ErrorCode.USER_NOT_FOUND, 
-                                f"User not found",
-                                log_level='info',
-                                request_id=request_id,
-                                extra={'operation': 'get_user',
-                                       'user_id': user_id})
+            return error_response(404, ErrorCode.USER_NOT_FOUND, "User not found")
         
         return response(200, {'user': user.model_dump(mode='json')}, request_id)
     
@@ -101,17 +92,14 @@ class UserService:
         """
         # Validate request body is not empty
         if not updates:
-            return error_response(400, ErrorCode.EMPTY_REQUEST_BODY, 'Request body cannot be empty')
+            return error_response(400, ErrorCode.EMPTY_REQUEST_BODY,
+                                   'Request body cannot be empty', request_id=request_id)
         
         # Check if user exists
         user = self.repository.get_user_by_id(user_id)
         if not user:
             return error_response(404, ErrorCode.USER_NOT_FOUND, 
-                                f"User with userId '{user_id}' not found",
-                                log_level='info',
-                                request_id=request_id,
-                                extra={'operation': 'update_user',
-                                       'user_id': user_id})
+                                "User not found", request_id=request_id)
         
         # Apply updates with validation
         try:

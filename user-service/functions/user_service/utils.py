@@ -62,7 +62,7 @@ def response(status_code: int, body: Dict[str, Any], request_id: Optional[str] =
     }
 
 
-def error_response(status_code: int, code: ErrorCode, message: str, field: Optional[str] = None, 
+def error_response(status_code: int, error_code: ErrorCode, message: str, field: Optional[str] = None, 
                    log_level: Optional[str] = None, request_id: Optional[str] = None, 
                    extra: Optional[Dict[str, Any]] = None):
     """
@@ -70,7 +70,7 @@ def error_response(status_code: int, code: ErrorCode, message: str, field: Optio
     
     Args:
         status_code: HTTP status code
-        code: Error code from ErrorCode enum
+        error_code: Error code from ErrorCode enum
         message: Human-readable error message
         field: Optional field name for validation errors
         log_level: Optional log level ('warning', 'error', 'info'). If provided, will log with structured context.
@@ -81,7 +81,7 @@ def error_response(status_code: int, code: ErrorCode, message: str, field: Optio
         Formatted API Gateway response with error details
     """
     error_body = {
-        'code': code.value,
+        'code': error_code.value,
         'message': message
     }
     if field:
@@ -91,7 +91,7 @@ def error_response(status_code: int, code: ErrorCode, message: str, field: Optio
     if log_level:
         log_func = getattr(logger, log_level.lower(), logger.info)
         log_context = extra.copy() if extra else {}
-        log_context['error_code'] = code.value
+        log_context['error_code'] = error_code.value
         log_context['status_code'] = status_code
         if request_id:
             log_context['request_id'] = request_id

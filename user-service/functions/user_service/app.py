@@ -76,6 +76,7 @@ def check_self_access_authorization(
         error_response if unauthorized, None if authorized
     """
     if user_id != authenticated_user_id:
+        # Log during testing to catch any authorization issues
         return error_response(
             403, 
             ErrorCode.FORBIDDEN,
@@ -197,9 +198,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     if not authenticated_user_id:
         # Should never get here if API Gateway JWT authorizer is configured correctly
         return error_response(
-            status_code=500,
-            error_code=ErrorCode.INTERNAL_SERVER_ERROR, 
-            message='Authentication failed: No sub found in JWT',
+            500,
+            ErrorCode.INTERNAL_SERVER_ERROR, 
+            'Authentication failed: No sub found in JWT',
             log_level='error',
             request_id=request_id,
             extra={'path': path})
@@ -216,13 +217,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         else:
             # Should never get here - indicates a configuration error
             return error_response(
-                status_code=500,
-                error_code=ErrorCode.INTERNAL_SERVER_ERROR, 
-                message='Invalid http_method',
-                log_level='warning',
+                500,
+                ErrorCode.INTERNAL_SERVER_ERROR, 
+                'Invalid http_method',
+                log_level='error',
                 request_id=request_id,
-                extra={'http_method': http_method,
-                       'path': path})
+                extra={'http_method': http_method, 'path': path})
         
         # Log successful completion
         logger.info('Request completed',

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
@@ -9,6 +9,21 @@ import re
 def get_utc_timestamp() -> str:
     """Generate ISO 8601 timestamp with Z suffix and milliseconds for frontend compatibility"""
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+
+
+def clean_string_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Strip whitespace from all string fields and convert empty strings to None
+    Used by model_validator and update_fields to ensure consistent behavior
+    """
+    cleaned_data = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            stripped = value.strip()
+            cleaned_data[key] = stripped if stripped else None
+        else:
+            cleaned_data[key] = value
+    return cleaned_data
 
 
 class UserType(str, Enum):
@@ -37,6 +52,12 @@ class User(BaseModel):
     User model for community fridge network using Pydantic
     Provides automatic validation, serialization, and type safety
     """
+    model_config = ConfigDict(
+        extra="forbid",  # Reject unexpected fields (catch typos, prevent injection)
+        use_enum_values=True,  # Automatically convert enums to their values in dict/json
+        validate_assignment=True  # Validate when fields are updated via setattr
+    )
+    
     # Required fields
     userId: str
     
@@ -61,11 +82,19 @@ class User(BaseModel):
     lastUpdated: str = Field(default_factory=get_utc_timestamp)
     lastLoginAt: str = Field(default_factory=get_utc_timestamp)
     
+    @model_validator(mode='before')
+    @classmethod
+    def strip_strings(cls, data: Any) -> Any:
+        """Strip whitespace from all string fields before validation, convert empty strings to None"""
+        if isinstance(data, dict):
+            return clean_string_fields(data)
+        return data
+    
     @field_validator('userId')
     @classmethod
     def validate_user_id(cls, userId: str) -> str:
         """Validate userId is not empty"""
-        if not userId or not userId.strip():
+        if not userId:
             raise ValueError('userId is required and cannot be empty')
         return userId
     
@@ -73,22 +102,56 @@ class User(BaseModel):
     @classmethod
     def validate_email(cls, email: Optional[str]) -> Optional[str]:
         """Validate email format if provided"""
-        if email is not None and email.strip():
+        if email:
             email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(email_pattern, email):
                 raise ValueError('Invalid email format')
         return email
     
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, username: Optional[str]) -> Optional[str]:
+        """Validate username format if provided"""
+        MIN_USERNAME_LENGTH = 3
+        MAX_USERNAME_LENGTH = 30
+        if username:
+            if len(username) < MIN_USERNAME_LENGTH:
+                raise ValueError(f'Username must be at least {MIN_USERNAME_LENGTH} characters')
+            if len(username) > MAX_USERNAME_LENGTH:
+                raise ValueError(f'Username must be {MAX_USERNAME_LENGTH} characters or less')
+            # Allow alphanumeric, underscore, and hyphen only (no spaces)
+            if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+                raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        return username
+    
+    @field_validator('phoneNumber')
+    @classmethod
+    def validate_phone_number(cls, phoneNumber: Optional[str]) -> Optional[str]:
+        """Validate phone number format if provided"""
+        MIN_PHONE_LENGTH = 10
+        MAX_PHONE_LENGTH = 15
+        if phoneNumber:
+            # Remove common separators for validation
+            digits_only = re.sub(r'[\s\-\(\)\+\.]', '', phoneNumber)
+            if not digits_only.isdigit():
+                raise ValueError('Phone number can only contain digits and separators (spaces, hyphens, parentheses, plus)')
+            if len(digits_only) < MIN_PHONE_LENGTH:
+                raise ValueError(f'Phone number must have at least {MIN_PHONE_LENGTH} digits')
+            if len(digits_only) > MAX_PHONE_LENGTH:
+                raise ValueError(f'Phone number must have at most {MAX_PHONE_LENGTH} digits')
+        return phoneNumber
+    
     @field_validator('zipcode')
     @classmethod
     def validate_zipcode(cls, zipcode: Optional[str]) -> Optional[str]:
-        """Validate zipcode format if provided (international support)"""
-        if zipcode is not None and zipcode.strip():
-            # Length validation: 3-10 characters for international postal codes
-            if len(zipcode) < 3:
-                raise ValueError('Zipcode must be at least 3 characters')
-            if len(zipcode) > 10:
-                raise ValueError('Zipcode must be 10 characters or less')
+        """Validate zipcode format if provided"""
+        MIN_ZIPCODE_LENGTH = 3
+        MAX_ZIPCODE_LENGTH = 10
+        if zipcode:
+            if len(zipcode) < MIN_ZIPCODE_LENGTH:
+                raise ValueError(f'Zipcode must be at least {MIN_ZIPCODE_LENGTH} characters')
+            if len(zipcode) > MAX_ZIPCODE_LENGTH:
+                raise ValueError(f'Zipcode must be {MAX_ZIPCODE_LENGTH} characters or less')
             # Only allow alphanumeric, spaces, hyphens for international support
             if not re.match(r'^[a-zA-Z0-9\s\-]+$', zipcode):
                 raise ValueError('Zipcode must contain only letters, numbers, spaces, and hyphens')
@@ -147,9 +210,12 @@ class User(BaseModel):
         Only updates allowed fields and re-validates
         Special handling for userType: only NEIGHBOR → VOLUNTEER is allowed
         """
+        # Strip strings and convert empty strings to None (same as model_validator)
+        cleaned_updates = clean_string_fields(updates)
+        
         # Handle userType transition validation
-        if 'userType' in updates:
-            new_type = updates['userType']
+        if 'userType' in cleaned_updates:
+            new_type = cleaned_updates['userType']
             # Only allow transitions to NEIGHBOR or VOLUNTEER for now
             #TODO: update this after discussion on what user types should do
             if new_type == UserType.NEIGHBOR.value or new_type == UserType.VOLUNTEER.value:
@@ -160,21 +226,21 @@ class User(BaseModel):
                 raise ValueError(
                     f"Invalid userType transition. Users can only change to {UserType.NEIGHBOR.value} or {UserType.VOLUNTEER.value} via self-update."
                 )
-            # Remove from updates dict so it's not processed again below
-            del updates['userType']
+            # Remove from cleaned_updates dict so it's not processed again below
+            del cleaned_updates['userType']
         
         # Validate and merge settings if settings are being updated (PATCH semantics)
-        if 'settings' in updates:
+        if 'settings' in cleaned_updates:
             valid_setting_keys = {key.value for key in SettingKey}
-            invalid_keys = set(updates['settings'].keys()) - valid_setting_keys
+            invalid_keys = set(cleaned_updates['settings'].keys()) - valid_setting_keys
             if invalid_keys:
                 raise ValueError(f"Invalid setting keys: {', '.join(sorted(invalid_keys))}")
             
             # Merge new settings with existing settings (PATCH behavior)
             # Only update the keys that are provided, keep existing values for others
             merged_settings = self.settings.copy()
-            merged_settings.update(updates['settings'])
-            updates['settings'] = merged_settings
+            merged_settings.update(cleaned_updates['settings'])
+            cleaned_updates['settings'] = merged_settings
         
         # Fields that can be updated (excluding userType - handled above)
         allowed_fields = {
@@ -183,7 +249,7 @@ class User(BaseModel):
         }
         
         # Apply updates
-        for field_name, value in updates.items():
+        for field_name, value in cleaned_updates.items():
             if field_name in allowed_fields:
                 setattr(self, field_name, value)
         
@@ -194,9 +260,4 @@ class User(BaseModel):
     
     def __str__(self) -> str:
         return self.model_dump_json(indent=2)
-    
-    class Config:
-        """Pydantic configuration"""
-        use_enum_values = True  # Automatically convert enums to their values in dict/json
-        validate_assignment = True  # Validate when fields are updated via setattr
 

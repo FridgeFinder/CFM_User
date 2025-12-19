@@ -11,7 +11,7 @@
     "domainName": "users-api-dev.communityfridgefinder.com",
     "domainPrefix": "users-api-dev",
     "http": {
-      "method": "PUT",
+      "method": "PATCH",
       "path": "/v1/users/firebase-user-123",
       "protocol": "HTTP/1.1",
       "sourceIp": "192.0.2.1",

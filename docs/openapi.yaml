@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Community Fridge User Service API
+  title: FridgeFinder User Service API
   description: |
-    User management API for the Community Fridge network.
+    User management API for the FridgeFinder
     
     ## Authentication
     All endpoints (except username availability check) require Firebase JWT authentication.
@@ -18,6 +18,9 @@ info:
   contact:
     name: Fridge Finder
     url: https://fridgefinder.app
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
   - url: https://users-api-dev.communityfridgefinder.com
@@ -67,8 +70,10 @@ paths:
                   userId: "firebase-user-123"
                   username: "mariamekaba"
                   email: "mariame@example.com"
-                  phoneNumber: "+1234567890"
+                  phoneNumber: "+15551234567"
                   zipcode: "12345"
+                  userType: "Neighbor"
+                  fcmToken: "FCM_TOKEN"
                   settings:
                     pushNotificationEnabled: true
                     emailNotificationEnabled: true
@@ -212,11 +217,12 @@ paths:
         - name: username
           in: path
           required: true
-          description: Username to check
+          description: Username to check availability
           schema:
             type: string
-            minLength: 1
-            maxLength: 50
+            minLength: 3
+            maxLength: 30
+            pattern: '^[a-zA-Z0-9_-]+$'
       responses:
         '200':
           description: Username availability status
@@ -309,10 +315,13 @@ components:
         username:
           type: string
           nullable: true
-          minLength: 1
-          maxLength: 50
-          description: Unique username for the user
-          example: "mariamekaba"
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: |
+            Username for the user.
+            Must be 3-30 characters, containing only letters, numbers, underscores, and hyphens.
+          example: "mariame_kaba"
         email:
           type: string
           format: email
@@ -322,8 +331,12 @@ components:
         phoneNumber:
           type: string
           nullable: true
-          description: User's phone number
-          example: "+1234567890"
+          minLength: 10
+          maxLength: 15
+          description: |
+            User's phone number with optional formatting.
+            Must contain 10-15 digits - formatting characters will be removed
+          example: "+1 (555) 123-4567"
         zipcode:
           type: string
           nullable: true
@@ -366,22 +379,41 @@ components:
         userId:
           type: string
           description: Firebase UID (must match authenticated user)
+          pattern: '^\S+$'
+          example: "firebase-user-123"
         username:
           type: string
           nullable: true
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Username containing only letters, numbers, underscores, and hyphens
+          example: "mariame_kaba"
         email:
           type: string
           format: email
           nullable: true
+          description: Valid email address
+          example: "mariame@example.com"
         phoneNumber:
           type: string
           nullable: true
+          minLength: 10
+          maxLength: 20
+          description: Phone number (10-15 digits with optional formatting)
+          example: "+1 (555) 123-4567"
         zipcode:
           type: string
           nullable: true
+          minLength: 3
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9\s\-]+$'
+          description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
+          example: "12345"
         fcmToken:
           type: string
           nullable: true
+          description: Firebase Cloud Messaging token
         settings:
           $ref: '#/components/schemas/Settings'
 
@@ -393,16 +425,28 @@ components:
         username:
           type: string
           nullable: true
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Username containing only letters, numbers, underscores, and hyphens
         email:
           type: string
           format: email
           nullable: true
+          description: Valid email address
         phoneNumber:
           type: string
           nullable: true
+          minLength: 10
+          maxLength: 20
+          description: Phone number (10-15 digits)
         zipcode:
           type: string
           nullable: true
+          minLength: 3
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9\s\-]+$'
+          description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
         fcmToken:
           type: string
           nullable: true
@@ -436,11 +480,24 @@ components:
           description: Machine-readable error code
         field:
           type: string
-          description: Field name (for validation errors)
-
-  responses:
-    BadRequest:
-      description: Invalid request
+            validation:
+              summary: Validation error
+              value:
+                error: "Username must be at least 3 characters"
+                errorCode: "VALIDATION_ERROR"
+                field: "username"
+            emailFormat:
+              summary: Email format validation
+              value:
+                error: "Invalid email format"
+                errorCode: "VALIDATION_ERROR"
+                field: "email"
+            phoneNumber:
+              summary: Phone number validation
+              value:
+                error: "Phone number must have at least 10 digits"
+                errorCode: "VALIDATION_ERROR"
+                field: "phoneNumber"
       headers:
         X-Request-Id:
           schema:
