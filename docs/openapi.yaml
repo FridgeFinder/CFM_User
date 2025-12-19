@@ -480,24 +480,11 @@ components:
           description: Machine-readable error code
         field:
           type: string
-          validation:
-            summary: Validation error
-            value:
-              error: "Username must be at least 3 characters"
-              errorCode: "VALIDATION_ERROR"
-              field: "username"
-          emailFormat:
-            summary: Email format validation
-            value:
-              error: "Invalid email format"
-              errorCode: "VALIDATION_ERROR"
-              field: "email"
-          phoneNumber:
-            summary: Phone number validation
-            value:
-              error: "Phone number must have at least 10 digits"
-              errorCode: "VALIDATION_ERROR"
-              field: "phoneNumber"
+          description: Field name (for validation errors)
+
+  responses:
+    BadRequest:
+      description: Invalid request
       headers:
         X-Request-Id:
           schema:
@@ -510,8 +497,21 @@ components:
             validation:
               summary: Validation error
               value:
+                error: "Username must be at least 3 characters"
+                errorCode: "VALIDATION_ERROR"
+                field: "username"
+            emailFormat:
+              summary: Email format validation
+              value:
                 error: "Invalid email format"
                 errorCode: "VALIDATION_ERROR"
+                field: "email"
+            phoneNumber:
+              summary: Phone number validation
+              value:
+                error: "Phone number must have at least 10 digits"
+                errorCode: "VALIDATION_ERROR"
+                field: "phoneNumber"
             emptyBody:
               summary: Empty request body
               value:
