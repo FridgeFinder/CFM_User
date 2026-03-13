@@ -118,6 +118,8 @@ Resources:
           Projection:
             ProjectionType: KEYS_ONLY
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES  # Capture full item state for delete events
 
   # Map custom domain to HTTP API
   ApiMapping:
@@ -211,6 +213,111 @@ Resources:
             Auth:
               Authorizer: NONE
 
+  # EventBridge Bus for User Service Events
+  UserEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub user-service-events-${Environment}
+
+  # EventBridge Pipe - Stream user deletions to EventBridge
+  UserDeletionPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: !Sub user-deletion-pipe-${Environment}
+      Description: Propagates user deletion events from DynamoDB Stream to EventBridge
+      RoleArn: !GetAtt UserDeletionPipeRole.Arn
+      Source: !GetAtt UsersTable.StreamArn
+      SourceParameters:
+        DynamoDBStreamParameters:
+          StartingPosition: LATEST
+          BatchSize: 10
+          MaximumBatchingWindowInSeconds: 1
+        FilterCriteria:
+          Filters:
+            - Pattern: '{"eventName": ["REMOVE"]}'
+      Target: !GetAtt UserEventBus.Arn
+      TargetParameters:
+        EventBridgeEventBusParameters:
+          DetailType: User Deleted
+          Source: user-service
+        InputTemplate: |
+          {
+            "userId": <$.dynamodb.OldImage.userId.S>,
+            "deletedAt": <$.dynamodb.ApproximateCreationDateTime>
+          }
+      LogConfiguration:
+        Level: ERROR
+        IncludeExecutionData:
+          - ALL
+        CloudwatchLogsLogDestination:
+          LogGroupArn: !GetAtt UserDeletionPipeLogGroup.Arn
+
+  # CloudWatch Log Group for Pipe
+  UserDeletionPipeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/pipes/user-deletion-pipe-${Environment}
+      RetentionInDays: 7
+
+  # IAM Role for EventBridge Pipe
+  UserDeletionPipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub user-deletion-pipe-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pipes.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SourceDynamoDBStreamPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !GetAtt UsersTable.StreamArn
+        - PolicyName: TargetEventBridgePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !GetAtt UserEventBus.Arn
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt UserDeletionPipeLogGroup.Arn
+
+  # CloudWatch Alarm for Pipe failures
+  UserDeletionPipeFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub user-deletion-pipe-failures-${Environment}
+      AlarmDescription: Alert when user deletion pipe fails to process events
+      MetricName: ExecutionFailed
+      Namespace: AWS/Pipes
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: PipeName
+          Value: !Ref UserDeletionPipe
+
 Outputs:
   UsersTableName:
     Description: DynamoDB Users Table Name
@@ -243,3 +350,19 @@ Outputs:
   UserServiceFunctionArn:
     Description: User Service Lambda Function ARN
     Value: !GetAtt UserServiceFunction.Arn
+  
+  UserEventBusArn:
+    Description: EventBridge Bus ARN for user events (used by other services)
+    Value: !GetAtt UserEventBus.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-EventBusArn
+  
+  UserEventBusName:
+    Description: EventBridge Bus Name for user events
+    Value: !Ref UserEventBus
+    Export:
+      Name: !Sub ${AWS::StackName}-EventBusName
+  
+  UserDeletionPipeArn:
+    Description: EventBridge Pipe ARN for user deletion events
+    Value: !GetAtt UserDeletionPipe.Arn
