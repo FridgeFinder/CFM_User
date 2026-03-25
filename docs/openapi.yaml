@@ -473,14 +473,21 @@ components:
         - error
       properties:
         error:
-          type: string
-          description: Error message
-        errorCode:
-          type: string
-          description: Machine-readable error code
-        field:
-          type: string
-          description: Field name (for validation errors)
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            field:
+              type: string
+              description: Field name (for validation errors)
+          additionalProperties: false
 
   responses:
     BadRequest:
@@ -497,26 +504,30 @@ components:
             validation:
               summary: Validation error
               value:
-                error: "Username must be at least 3 characters"
-                errorCode: "VALIDATION_ERROR"
-                field: "username"
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Username must be at least 3 characters"
+                  field: "username"
             emailFormat:
               summary: Email format validation
               value:
-                error: "Invalid email format"
-                errorCode: "VALIDATION_ERROR"
-                field: "email"
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid email format"
+                  field: "email"
             phoneNumber:
               summary: Phone number validation
               value:
-                error: "Phone number must have at least 10 digits"
-                errorCode: "VALIDATION_ERROR"
-                field: "phoneNumber"
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Phone number must have at least 10 digits"
+                  field: "phoneNumber"
             emptyBody:
               summary: Empty request body
               value:
-                error: "Request body cannot be empty"
-                errorCode: "EMPTY_REQUEST_BODY"
+                error:
+                  code: "EMPTY_REQUEST_BODY"
+                  message: "Request body cannot be empty"
 
     Forbidden:
       description: Forbidden - User lacks permission
@@ -529,8 +540,9 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: "User can only access their own user data"
-            errorCode: "FORBIDDEN"
+            error:
+              code: "FORBIDDEN"
+              message: "User can only access their own user data"
 
     NotFound:
       description: User not found
@@ -543,8 +555,9 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: "User with userId 'firebase-user-123' not found"
-            errorCode: "USER_NOT_FOUND"
+            error:
+              code: "ITEM_NOT_FOUND"
+              message: "User with userId 'firebase-user-123' not found"
 
     Conflict:
       description: Conflict - User already exists
@@ -557,8 +570,9 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: "User with this userId already exists"
-            errorCode: "USER_ALREADY_EXISTS"
+            error:
+              code: "ITEM_ALREADY_EXISTS"
+              message: "User with this userId already exists"
 
     InternalServerError:
       description: Internal server error
@@ -571,5 +585,6 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: "An unexpected error occurred"
-            errorCode: "INTERNAL_SERVER_ERROR"
+            error:
+              code: "INTERNAL_SERVER_ERROR"
+              message: "An unexpected error occurred"
