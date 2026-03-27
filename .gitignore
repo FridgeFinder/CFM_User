@@ -27,7 +27,7 @@ wheels/
 venv/
 ENV/
 env/
-.venv
+.venv/
 
 # AWS SAM
 .aws-sam/
