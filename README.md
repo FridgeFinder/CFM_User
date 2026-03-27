@@ -65,6 +65,7 @@ Follow these steps to get Dynamodb running locally
     ```
 
 ---
+
 ## Build and Test Locally
 
 ### 1. Build the Application
@@ -79,17 +80,9 @@ sam build --use-container
 ```sh
 sam local invoke HelloWorldFunction --event events/event.json
 ```
-Expected response: `{"statusCode": 200, "body": "{\"message\": \"hello world\"}"}`
+Expected response: `{"statusCode": 200, "body": "{\"message\": \"hello user service\"}"}`
 
-### 3. Start Local API
-
-```sh
-sam local start-api
-curl http://localhost:3000/hello
-```
-Expected response: `{"message": "hello world"}`
-
-### 4. Test User Service Functions with Events
+### 3. Test User Service Functions with Events
 
 **Create a new user:**
 ```sh
@@ -106,6 +99,17 @@ sam local invoke UserServiceFunction \
 ```sh
 sam local invoke UserServiceFunction \
   --event events/get-user.json \
+  --parameter-overrides \
+    ParameterKey=DeploymentTarget,ParameterValue=local \
+    ParameterKey=Stage,ParameterValue=dev \
+    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
+  --docker-network cfm-network
+```
+
+**Get user profile: internal**
+```sh
+sam local invoke InternalUserServiceFunction \
+  --event events/internal-get-user.json \
   --parameter-overrides \
     ParameterKey=DeploymentTarget,ParameterValue=local \
     ParameterKey=Stage,ParameterValue=dev \
@@ -147,6 +151,93 @@ sam local invoke UserServiceFunction \
 ```
 
 **Note:** The `--docker-network cfm-network` flag ensures the Lambda can communicate with LocalStack DynamoDB running in Docker.
+
+---
+
+## Running Unit Tests
+
+Unit tests live in `user-service/tests/unit/` and use `pytest`. They do **not** require Docker, LocalStack, or a running DynamoDB — all AWS calls are mocked.
+
+### 1. Create and activate a virtual environment
+
+```sh
+cd user-service/
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+> To deactivate the virtual environment when you're done, run `deactivate`.
+
+### 2. Install test dependencies
+
+```sh
+# From user-service/ with the virtual environment activated
+pip install -r tests/requirements.txt
+# Also install the layer packages used by the functions
+pip install -r functions/user_service/requirements.txt
+```
+
+### 3. Run all unit tests
+
+```sh
+# From user-service/ with the virtual environment activated
+pytest tests/unit/ -v
+```
+
+### 4. Run a specific test file
+
+```sh
+pytest tests/unit/test_models.py -v
+pytest tests/unit/test_service.py -v
+pytest tests/unit/test_repository.py -v
+pytest tests/unit/test_user_service_handler.py -v
+pytest tests/unit/test_internal_user_service.py -v
+pytest tests/unit/test_username_check.py -v
+pytest tests/unit/test_utils.py -v
+```
+
+### 5. Run with coverage
+
+```sh
+# Terminal report
+pytest tests/unit/ --cov=functions --cov-report=term-missing
+
+# HTML report (opens as htmlcov/index.html)
+pytest tests/unit/ --cov=functions --cov-report=html
+```
+
+---
+
+## Deploying to AWS
+
+Deployments use `user-service/samconfig_local.toml`, which defines configuration for `dev`, `staging`, and `prod` environments.
+
+> **Before deploying**, replace the placeholder values in `samconfig_local.toml`:
+> - `YOUR_STAGING_FIREBASE_PROJECT_ID` — your Firebase project ID for dev/staging
+> - `YOUR_PROD_FIREBASE_PROJECT_ID` — your Firebase project ID for production
+> - `YOUR_HOSTED_ZONE_ID` — your Route 53 Hosted Zone ID
+
+### 1. Build
+
+```sh
+cd user-service/
+sam build
+```
+
+### 2. Deploy
+
+```sh
+# Deploy to dev
+sam deploy --config-env dev --config-file samconfig_local.toml
+
+# Deploy to staging
+sam deploy --config-env staging --config-file samconfig_local.toml
+
+# Deploy to production
+sam deploy --config-env prod --config-file samconfig_local.toml
+```
+
+Each command will show a changeset and prompt for confirmation before applying changes.
 
 ---
 ## Test User Service with local api
