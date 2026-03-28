@@ -101,6 +101,15 @@ Resources:
         AllowOrigins:
           - '*'
 
+  # Internal HTTP API (API Gateway v2) - IAM auth only, for service-to-service calls
+  InternalHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Auth:
+        EnableIamAuthorizer: true
+        DefaultAuthorizer: AWS_IAM
+
   # DynamoDB Table for Users
   UsersTable:
     Type: AWS::DynamoDB::Table
@@ -266,11 +275,9 @@ Resources:
         GetUserInternal:
           Type: HttpApi
           Properties:
-            ApiId: !Ref UserHttpApi
+            ApiId: !Ref InternalHttpApi
             Path: /internal/v1/users/{userId}
             Method: get
-            Auth:
-              Authorizer: AWS_IAM
 
   # EventBridge Bus for User Service Events
   UserEventBus:
@@ -432,6 +439,6 @@ Outputs:
 
   InternalApiBaseUrl:
     Description: Base URL for internal IAM-authenticated routes
-    Value: !Sub "https://${UserHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/internal/v1"
+    Value: !Sub "https://${InternalHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/internal/v1"
     Export:
       Name: !Sub ${AWS::StackName}-InternalApiBaseUrl

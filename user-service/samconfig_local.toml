@@ -17,7 +17,7 @@ parallel = true
 lint = true
 
 [dev.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = true
 region = "us-east-1"
 s3_bucket = "cfm-sam-artifacts"
@@ -50,7 +50,7 @@ parallel = true
 lint = true
 
 [staging.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = true
 region = "us-east-1"
 s3_bucket = "cfm-sam-artifacts"
@@ -83,7 +83,7 @@ parallel = true
 lint = true
 
 [prod.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = true
 region = "us-east-1"
 s3_bucket = "cfm-sam-artifacts"
