@@ -43,7 +43,7 @@ def is_username_available(username: str) -> bool:
         Limit=1,
         Select='COUNT'
     )
-    return result.get('Count', 0) == 0
+    return result['Count'] == 0
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

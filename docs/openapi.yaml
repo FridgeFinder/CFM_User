@@ -40,6 +40,10 @@ tags:
     description: User management operations
   - name: Public
     description: Public endpoints (no authentication required)
+  - name: Internal
+    description: Service-to-service endpoints (IAM/SigV4 authentication)
+  - name: Health
+    description: Health check endpoints
 
 paths:
   /v1/users:
@@ -174,10 +178,14 @@ paths:
                 $ref: '#/components/schemas/UserResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -249,6 +257,73 @@ paths:
                   summary: Username is taken
                   value:
                     available: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/v1/users/{userId}:
+    get:
+      tags:
+        - Internal
+      summary: Get user details (internal)
+      description: |
+        Service-to-service endpoint. Returns a projected subset of user data
+        (email, fcmToken, settings). Requires AWS IAM (SigV4) authentication —
+        not accessible from the public internet.
+      operationId: getInternalUser
+      security:
+        - AWS_IAM: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User details retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - user
+                properties:
+                  user:
+                    $ref: '#/components/schemas/InternalUserDetails'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /hello:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Public health check endpoint. No authentication required.
+      operationId: helloWorld
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "hello user service"
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -259,6 +334,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Firebase JWT token
+    AWS_IAM:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: AWS IAM (SigV4) authentication for service-to-service calls
 
   parameters:
     UserId:
@@ -459,6 +539,22 @@ components:
           format: date-time
       minProperties: 1
 
+    InternalUserDetails:
+      type: object
+      description: Projected user data returned by the internal endpoint
+      properties:
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: User's email address
+        fcmToken:
+          type: string
+          nullable: true
+          description: Firebase Cloud Messaging token for push notifications
+        settings:
+          $ref: '#/components/schemas/Settings'
+
     UserResponse:
       type: object
       required:
@@ -560,7 +656,31 @@ components:
               message: "User with userId 'firebase-user-123' not found"
 
     Conflict:
-      description: Conflict - User already exists
+      description: Conflict - resource already exists or write conflict
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            userAlreadyExists:
+              summary: User already exists (POST)
+              value:
+                error:
+                  code: "ITEM_ALREADY_EXISTS"
+                  message: "User with this userId already exists"
+            writeConflict:
+              summary: Concurrent update conflict (PATCH)
+              value:
+                error:
+                  code: "WRITE_CONFLICT"
+                  message: "Update conflict: the user was modified by another request. Please retry."
+
+    MethodNotAllowed:
+      description: HTTP method not allowed
       headers:
         X-Request-Id:
           schema:
@@ -571,8 +691,8 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error:
-              code: "ITEM_ALREADY_EXISTS"
-              message: "User with this userId already exists"
+              code: "METHOD_NOT_ALLOWED"
+              message: "Method POST not allowed"
 
     InternalServerError:
       description: Internal server error

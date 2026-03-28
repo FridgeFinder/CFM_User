@@ -129,6 +129,7 @@ class User(BaseModel):
                 raise ValueError(f'Phone number must have at least {MIN_PHONE_LENGTH} digits')
             if len(digits_only) > MAX_PHONE_LENGTH:
                 raise ValueError(f'Phone number must have at most {MAX_PHONE_LENGTH} digits')
+            return digits_only
         return phoneNumber
     
     @field_validator('zipcode')
