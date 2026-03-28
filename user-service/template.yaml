@@ -12,6 +12,10 @@ Globals:
     MemorySize: 256
     Architectures:
       - x86_64
+    Layers:
+      - !Ref HttpUtilsLayer
+      - !Ref DynamoUtilsLayer
+      - !Ref ValidationUtilsLayer
     Environment:
       Variables:
         USERS_TABLE: !Sub users_${Environment}
@@ -140,12 +144,45 @@ Resources:
         DNSName: !GetAtt ApiDomainName.RegionalDomainName
         HostedZoneId: !GetAtt ApiDomainName.RegionalHostedZoneId
 
+  # Shared Lambda Layer: centralized HTTP error responses and status codes
+  HttpUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub http-utils-${Environment}
+      Description: Centralized HTTP error responses and status codes
+      ContentUri: layers/http_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Shared Lambda Layer: field-level validation helpers (username, etc.)
+  ValidationUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub validation-utils-${Environment}
+      Description: Shared field validation helpers
+      ContentUri: layers/validation_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Shared Lambda Layer: DynamoDB client factory (AWS vs LocalStack)
+  DynamoUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub dynamo-utils-${Environment}
+      Description: DynamoDB client factory with LocalStack support
+      ContentUri: layers/dynamo_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
   # Health Check Lambda Function (No auth required)
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/hello_world/
-      Handler: app.lambda_handler
+      Handler: hello_world_handler.lambda_handler
       Events:
         HelloWorld:
           Type: HttpApi
@@ -161,7 +198,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/user_service/
-      Handler: app.lambda_handler
+      Handler: user_service_handler.lambda_handler
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
@@ -196,7 +233,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/username_check/
-      Handler: app.lambda_handler
+      Handler: username_check_handler.lambda_handler
       Policies:
         - Statement:
           - Effect: Allow
@@ -212,6 +249,28 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+
+  # Internal Lambda Function for service-to-service queries (IAM auth, no Firebase)
+  InternalUserServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/internal_user_service/
+      Handler: internal_user_service_handler.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt UsersTable.Arn
+      Events:
+        GetUserInternal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /internal/v1/users/{userId}
+            Method: get
+            Auth:
+              Authorizer: AWS_IAM
 
   # EventBridge Bus for User Service Events
   UserEventBus:
@@ -366,3 +425,13 @@ Outputs:
   UserDeletionPipeArn:
     Description: EventBridge Pipe ARN for user deletion events
     Value: !GetAtt UserDeletionPipe.Arn
+
+  InternalUserServiceFunctionArn:
+    Description: Internal User Service Lambda Function ARN (for service-to-service calls)
+    Value: !GetAtt InternalUserServiceFunction.Arn
+
+  InternalApiBaseUrl:
+    Description: Base URL for internal IAM-authenticated routes
+    Value: !Sub "https://${UserHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/internal/v1"
+    Export:
+      Name: !Sub ${AWS::StackName}-InternalApiBaseUrl

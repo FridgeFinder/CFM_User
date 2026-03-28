@@ -2,33 +2,19 @@
 Lambda handler for User Service
 Handles HTTP event parsing, JWT extraction, routing, and error handling
 """
-import boto3
 import os
 import json
 import logging
 from typing import Dict, Any, Tuple, Optional
-from utils import error_response, ErrorCode, get_authenticated_user_id
+from utils import get_authenticated_user_id
+from http_utils import HttpStatus, error_response, ErrorCode
+from dynamo_utils import get_ddb_client
 from repository import UserRepository
 from service import UserService
 
 # Configure logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-def get_ddb_client() -> boto3.client:
-    """
-    Get DynamoDB client with support for local testing
-    Set DEPLOYMENT_TARGET=local to connect to LocalStack
-    """
-    deployment_target = os.getenv("DEPLOYMENT_TARGET", "local")
-    if deployment_target == "aws":
-        return boto3.client("dynamodb")
-    else:
-        return boto3.client(
-            "dynamodb",
-            endpoint_url="http://localstack:4566"
-        )
 
 
 # Initialize DynamoDB client, repository, and service
@@ -52,7 +38,7 @@ def get_user_id_from_path(event: Dict[str, Any]) -> Tuple[Optional[str], Optiona
     user_id = path_params.get('userId')
     
     if not user_id:
-        return None, error_response(400, ErrorCode.USER_ID_REQUIRED, 'userId is required in path')
+        return None, error_response(HttpStatus.BAD_REQUEST, ErrorCode.USER_ID_REQUIRED, 'userId is required in path')
     
     return user_id, None
 
@@ -76,16 +62,17 @@ def check_self_access_authorization(
         error_response if unauthorized, None if authorized
     """
     if user_id != authenticated_user_id:
-        # Log during testing to catch any authorization issues
-        return error_response(
-            403, 
-            ErrorCode.FORBIDDEN,
-            f'User can only {operation} their own user data',
-            log_level='warning',
-            request_id=request_id,
+        logger.warning(
+            'Authorization denied',
             extra={'operation': operation,
                    'requested_user_id': user_id,
-                   'authenticated_user_id': authenticated_user_id})
+                   'authenticated_user_id': authenticated_user_id,
+                   'request_id': request_id})
+        return error_response(
+            HttpStatus.FORBIDDEN,
+            ErrorCode.FORBIDDEN,
+            f'User can only {operation} their own user data',
+            request_id=request_id)
     return None
 
 
@@ -102,7 +89,7 @@ def parse_json_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Op
     try:
         return json.loads(event.get('body', '{}')), None
     except json.JSONDecodeError:
-        return None, error_response(400, ErrorCode.INVALID_JSON, 'Invalid JSON in request body')
+        return None, error_response(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_JSON, 'Invalid JSON in request body')
 
 
 def handle_post_user(event: Dict[str, Any], authenticated_user_id: str, request_id: str) -> Dict[str, Any]:
@@ -113,7 +100,7 @@ def handle_post_user(event: Dict[str, Any], authenticated_user_id: str, request_
     
     requested_user_id = body.get('userId')
     if not requested_user_id:
-        return error_response(400, ErrorCode.USER_ID_REQUIRED, 'userId is required in request body', 
+        return error_response(HttpStatus.BAD_REQUEST, ErrorCode.USER_ID_REQUIRED, 'userId is required in request body', 
                             field='userId', request_id=request_id)
     
     # Authorization: user can only create their own profile
@@ -197,13 +184,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     if not authenticated_user_id:
         # Should never get here if API Gateway JWT authorizer is configured correctly
-        return error_response(
-            500,
-            ErrorCode.INTERNAL_SERVER_ERROR, 
+        logger.error(
             'Authentication failed: No sub found in JWT',
-            log_level='error',
-            request_id=request_id,
-            extra={'path': path})
+            extra={'request_id': request_id, 'path': path})
+        return error_response(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            ErrorCode.INTERNAL_SERVER_ERROR,
+            'Authentication failed: No sub found in JWT',
+            request_id=request_id)
     # Route to appropriate handler function
     try:        
         if http_method == 'GET':
@@ -216,13 +204,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             result = handle_delete_user(event, authenticated_user_id, request_id)
         else:
             # Should never get here - indicates a configuration error
-            return error_response(
-                500,
-                ErrorCode.INTERNAL_SERVER_ERROR, 
+            logger.error(
                 'Invalid http_method',
-                log_level='error',
-                request_id=request_id,
-                extra={'http_method': http_method, 'path': path})
+                extra={'http_method': http_method, 'path': path, 'request_id': request_id})
+            return error_response(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                'Invalid http_method',
+                request_id=request_id)
         
         # Log successful completion
         logger.info('Request completed',
@@ -241,5 +230,5 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                'user_id': authenticated_user_id,
                                'error_message': str(e),
                                "error_type": type(e).__name__})
-        return error_response(500, ErrorCode.INTERNAL_SERVER_ERROR, 'An unexpected error occurred')
+        return error_response(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_SERVER_ERROR, 'An unexpected error occurred')
 

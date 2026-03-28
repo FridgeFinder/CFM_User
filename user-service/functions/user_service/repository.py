@@ -3,7 +3,6 @@ Data access layer for User service
 Handles all DynamoDB operations
 """
 from typing import Optional, Dict, Any
-from botocore.exceptions import ClientError
 from dynamodb_utils import python_to_dynamodb
 from models import User
 
@@ -50,29 +49,40 @@ class UserRepository:
             ConditionExpression='attribute_not_exists(userId)'
         )
     
-    def update_user(self, user_data: Dict[str, Any]) -> None:
+    def update_user(self, user_data: Dict[str, Any], previous_last_updated: str) -> None:
         """
-        Update an existing user record
+        Update an existing user record with optimistic locking.
         
         Args:
             user_data: Complete user data to save
+            previous_last_updated: The lastUpdated value read before applying updates.
+                Used as a conditional check to prevent overwriting a concurrent write.
+                
+        Raises:
+            ClientError: ConditionalCheckFailedException if another write updated the
+                record between the read and this write (optimistic lock conflict).
         """
         self.dynamodb_client.put_item(
             TableName=self.table_name,
-            Item=python_to_dynamodb(user_data)
+            Item=python_to_dynamodb(user_data),
+            ConditionExpression='lastUpdated = :prev_last_updated',
+            ExpressionAttributeValues=python_to_dynamodb({':prev_last_updated': previous_last_updated})
         )
     
     def user_exists(self, user_id: str) -> bool:
         """
-        Check if a user exists
-        
+        Check if a user exists.
         Args:
             user_id: The userId to check
-            
         Returns:
             True if user exists, False otherwise
         """
-        return self.get_user_by_id(user_id) is not None
+        result = self.dynamodb_client.get_item(
+            TableName=self.table_name,
+            Key=python_to_dynamodb({'userId': user_id}),
+            ProjectionExpression='userId'
+        )
+        return 'Item' in result
     
     def delete_user(self, user_id: str) -> None:
         """

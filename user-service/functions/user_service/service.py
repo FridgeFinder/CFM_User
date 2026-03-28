@@ -3,12 +3,11 @@ Service layer for user operations
 Handles business logic and validation
 """
 import logging
-import json
 from typing import Dict, Any
 from botocore.exceptions import ClientError
-from models import User, UserType
+from models import User
 from repository import UserRepository
-from utils import response, error_response, ErrorCode
+from http_utils import HttpStatus, http_response, error_response, ErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -43,7 +42,7 @@ class UserService:
         try:
             user = User(**body)
         except ValueError as e:
-            return error_response(400, ErrorCode.VALIDATION_ERROR, str(e))
+            return error_response(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, str(e))
         
         # Save to database
         try:
@@ -54,11 +53,11 @@ class UserService:
                               'request_id': request_id})
         except ClientError as e:
             if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                return error_response(409, ErrorCode.USER_ALREADY_EXISTS, 
+                return error_response(HttpStatus.CONFLICT, ErrorCode.ITEM_ALREADY_EXISTS,
                                     'User with this userId already exists')
             raise
         
-        return response(201, {'user': user.model_dump(mode='json')}, request_id)
+        return http_response(HttpStatus.CREATED, {'user': user.model_dump(mode='json')}, request_id)
     
     def get_user(self, user_id: str, request_id: str = None) -> Dict[str, Any]:
         """
@@ -74,9 +73,9 @@ class UserService:
         # Fetch from database
         user = self.repository.get_user_by_id(user_id)
         if not user:
-            return error_response(404, ErrorCode.USER_NOT_FOUND, "User not found")
+            return error_response(HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND, "User not found")
         
-        return response(200, {'user': user.model_dump(mode='json')}, request_id)
+        return http_response(HttpStatus.OK, {'user': user.model_dump(mode='json')}, request_id)
     
     def update_user(self, user_id: str, updates: Dict[str, Any], request_id: str = None) -> Dict[str, Any]:
         """
@@ -92,24 +91,33 @@ class UserService:
         """
         # Validate request body is not empty
         if not updates:
-            return error_response(400, ErrorCode.EMPTY_REQUEST_BODY,
+            return error_response(HttpStatus.BAD_REQUEST, ErrorCode.EMPTY_REQUEST_BODY,
                                    'Request body cannot be empty', request_id=request_id)
         
         # Check if user exists
         user = self.repository.get_user_by_id(user_id)
         if not user:
-            return error_response(404, ErrorCode.USER_NOT_FOUND, 
+            return error_response(HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND,
                                 "User not found", request_id=request_id)
         
         # Apply updates with validation
         try:
+            previous_last_updated = user.lastUpdated
             user.update_fields(updates)
         except ValueError as e:
-            return error_response(400, ErrorCode.VALIDATION_ERROR, str(e))
+            return error_response(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, str(e))
         
-        # Save to database
-        self.repository.update_user(user.to_dict())        
-        return response(200, {'user': user.model_dump(mode='json')}, request_id)
+        # Save to database with optimistic locking on lastUpdated
+        try:
+            self.repository.update_user(user.to_dict(), previous_last_updated)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                return error_response(HttpStatus.CONFLICT, ErrorCode.WRITE_CONFLICT,
+                                      'Update conflict: the user was modified by another request. Please retry.',
+                                      request_id=request_id)
+            raise
+
+        return http_response(HttpStatus.OK, {'user': user.model_dump(mode='json')}, request_id)
     
     def delete_user(self, user_id: str, request_id: str = None) -> Dict[str, Any]:
         """
@@ -121,10 +129,10 @@ class UserService:
             API response with success message or error
         """
         # Check if user exists
-        user = self.repository.get_user_by_id(user_id)
+        user = self.repository.user_exists(user_id)
         if not user:
-            return error_response(404, ErrorCode.USER_NOT_FOUND, f"User not found")
+            return error_response(HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND, "User not found")
         
         # Delete from database
         self.repository.delete_user(user_id)        
-        return response(204, None, request_id)
+        return http_response(HttpStatus.NO_CONTENT, None, request_id)

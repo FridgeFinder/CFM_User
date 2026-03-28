@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict, model_valida
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
-import json
+from validation_utils import validate_username as _validate_username_format
 import re
 
 
@@ -37,14 +37,17 @@ class UserType(str, Enum):
     NEIGHBOR = "Neighbor"      # Uses the community fridges
 
 
-class SettingKey(str, Enum):
+class UserSettings(BaseModel):
     """
-    Valid user setting keys
-    Inherits from str to ensure JSON serialization compatibility
+    Nested model for user notification and feature settings.
+    Invalid keys are silently ignored on construction (extra='ignore');
+    update_fields enforces strict key validation separately.
     """
-    PUSH_NOTIFICATION_ENABLED = "pushNotificationEnabled"
-    EMAIL_NOTIFICATION_ENABLED = "emailNotificationEnabled"
-    GEOFENCE_ENABLED = "geofenceEnabled"
+    model_config = ConfigDict(extra="ignore")
+
+    pushNotificationEnabled: bool = False
+    emailNotificationEnabled: bool = False
+    geofenceEnabled: bool = False
 
 
 class User(BaseModel):
@@ -71,11 +74,7 @@ class User(BaseModel):
     phoneNumber: Optional[str] = None
     zipcode: Optional[str] = None
     fcmToken: Optional[str] = None #TODO: Consider making this a set to allow for multiple devices to receive notifications
-    settings: Dict[str, bool] = Field(default_factory=lambda: {
-        SettingKey.PUSH_NOTIFICATION_ENABLED.value: False,
-        SettingKey.EMAIL_NOTIFICATION_ENABLED.value: False,
-        SettingKey.GEOFENCE_ENABLED.value: False
-    })
+    settings: UserSettings = Field(default_factory=UserSettings)
     
     # Timestamps with defaults (ISO 8601 with Z suffix for frontend compatibility)
     createdAt: str = Field(default_factory=get_utc_timestamp)
@@ -112,16 +111,7 @@ class User(BaseModel):
     @classmethod
     def validate_username(cls, username: Optional[str]) -> Optional[str]:
         """Validate username format if provided"""
-        MIN_USERNAME_LENGTH = 3
-        MAX_USERNAME_LENGTH = 30
-        if username:
-            if len(username) < MIN_USERNAME_LENGTH:
-                raise ValueError(f'Username must be at least {MIN_USERNAME_LENGTH} characters')
-            if len(username) > MAX_USERNAME_LENGTH:
-                raise ValueError(f'Username must be {MAX_USERNAME_LENGTH} characters or less')
-            # Allow alphanumeric, underscore, and hyphen only (no spaces)
-            if not re.match(r'^[a-zA-Z0-9_-]+$', username):
-                raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        _validate_username_format(username)
         return username
     
     @field_validator('phoneNumber')
@@ -156,25 +146,6 @@ class User(BaseModel):
             if not re.match(r'^[a-zA-Z0-9\s\-]+$', zipcode):
                 raise ValueError('Zipcode must contain only letters, numbers, spaces, and hyphens')
         return zipcode
-    
-    @field_validator('settings')
-    @classmethod
-    def validate_settings(cls, settings: Dict[str, bool]) -> Dict[str, bool]:
-        """Validate settings: fill in missing keys with defaults, ignore invalid keys"""
-        # Default values for each setting
-        # Note: Missing settings keys are filled with defaults
-        defaults = {
-            SettingKey.PUSH_NOTIFICATION_ENABLED.value: False,
-            SettingKey.EMAIL_NOTIFICATION_ENABLED.value: False,
-            SettingKey.GEOFENCE_ENABLED.value: False
-        }
-        
-        validated_settings = {}
-        for key, default_value in defaults.items():
-            # Use provided value or default
-            validated_settings[key] = settings.get(key, default_value)
-        
-        return validated_settings
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'User':
@@ -231,16 +202,13 @@ class User(BaseModel):
         
         # Validate and merge settings if settings are being updated (PATCH semantics)
         if 'settings' in cleaned_updates:
-            valid_setting_keys = {key.value for key in SettingKey}
-            invalid_keys = set(cleaned_updates['settings'].keys()) - valid_setting_keys
-            if invalid_keys:
-                raise ValueError(f"Invalid setting keys: {', '.join(sorted(invalid_keys))}")
-            
+            for key in cleaned_updates['settings']:
+                if key not in UserSettings.model_fields:
+                    raise ValueError(f"Invalid setting key: {key}")
+
             # Merge new settings with existing settings (PATCH behavior)
             # Only update the keys that are provided, keep existing values for others
-            merged_settings = self.settings.copy()
-            merged_settings.update(cleaned_updates['settings'])
-            cleaned_updates['settings'] = merged_settings
+            cleaned_updates['settings'] = self.settings.model_copy(update=cleaned_updates['settings'])
         
         # Fields that can be updated (excluding userType - handled above)
         allowed_fields = {
