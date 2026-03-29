@@ -169,7 +169,7 @@ class TestUpdateUser:
         # update_user is called as update_user(user_dict, previous_last_updated)
         assert mock_repo.update_user.call_args.args[1] == original_last_updated
 
-    def test_returns_409_on_write_conflict(self):
+    def test_returns_409_on_concurrent_modification(self):
         mock_repo, svc = _make_service()
         mock_repo.get_user_by_id.return_value = _sample_user("u-1")
         mock_repo.update_user.side_effect = ClientError(
@@ -181,7 +181,7 @@ class TestUpdateUser:
 
         assert result["statusCode"] == HttpStatus.CONFLICT
         body = json.loads(result["body"])
-        assert body["error"]["code"] == "WRITE_CONFLICT"
+        assert body["error"]["code"] == "CONCURRENT_MODIFICATION"
 
 
 # ── delete_user ────────────────────────────────────────────────────────────

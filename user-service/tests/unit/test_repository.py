@@ -114,7 +114,7 @@ class TestUpdateUser:
         assert kwargs["ConditionExpression"] == "lastUpdated = :prev_last_updated"
         assert ":prev_last_updated" in kwargs["ExpressionAttributeValues"]
 
-    def test_raises_on_write_conflict(self):
+    def test_raises_on_concurrent_modification(self):
         mock_client, repo = _make_repo()
         mock_client.put_item.side_effect = ClientError(
             {"Error": {"Code": "ConditionalCheckFailedException", "Message": ""}},

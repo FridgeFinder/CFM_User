@@ -112,7 +112,7 @@ class UserService:
             self.repository.update_user(user.to_dict(), previous_last_updated)
         except ClientError as e:
             if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                return error_response(HttpStatus.CONFLICT, ErrorCode.WRITE_CONFLICT,
+                return error_response(HttpStatus.CONFLICT, ErrorCode.CONCURRENT_MODIFICATION,
                                       'Update conflict: the user was modified by another request. Please retry.',
                                       request_id=request_id)
             raise

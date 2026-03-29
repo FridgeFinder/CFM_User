@@ -674,7 +674,7 @@ components:
               summary: Concurrent update conflict (PATCH)
               value:
                 error:
-                  code: "WRITE_CONFLICT"
+                  code: "CONCURRENT_MODIFICATION"
                   message: "Update conflict: the user was modified by another request. Please retry."
 
     MethodNotAllowed:
