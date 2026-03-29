@@ -221,7 +221,7 @@ Deployments use `user-service/samconfig_local.toml`, which defines configuration
 
 ```sh
 cd user-service/
-sam build
+sam build --use-container
 ```
 
 ### 2. Deploy
