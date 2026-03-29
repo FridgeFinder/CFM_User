@@ -200,10 +200,10 @@ pytest tests/unit/test_utils.py -v
 
 ```sh
 # Terminal report
-pytest tests/unit/ --cov=functions --cov-report=term-missing
+pytest tests/unit/ --cov=functions --cov=layers --cov-report=term-missing
 
 # HTML report (opens as htmlcov/index.html)
-pytest tests/unit/ --cov=functions --cov-report=html
+pytest tests/unit/ --cov=functions --cov=layers  --cov-report=html
 ```
 
 ---
