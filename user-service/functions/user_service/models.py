@@ -46,7 +46,7 @@ class UserSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     pushNotificationEnabled: bool = False
-    emailNotificationEnabled: bool = False
+    emailNotificationEnabled: bool = True
     geofenceEnabled: bool = False
 
 

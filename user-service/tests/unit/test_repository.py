@@ -30,7 +30,7 @@ def _dynamo_user_item(user_id: str = "u-1") -> dict:
         "settings": {
             "M": {
                 "pushNotificationEnabled": {"BOOL": False},
-                "emailNotificationEnabled": {"BOOL": False},
+                "emailNotificationEnabled": {"BOOL": True},
                 "geofenceEnabled": {"BOOL": False},
             }
         },

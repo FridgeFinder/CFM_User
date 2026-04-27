@@ -65,7 +65,7 @@ class TestEnums:
     def test_user_settings_defaults_are_false(self):
         s = UserSettings()
         assert s.pushNotificationEnabled is False
-        assert s.emailNotificationEnabled is False
+        assert s.emailNotificationEnabled is True
         assert s.geofenceEnabled is False
 
 
@@ -259,7 +259,7 @@ class TestSettingsValidation:
     def test_partial_settings_fills_defaults(self):
         user = _make_user(settings={"pushNotificationEnabled": True})
         assert user.settings.pushNotificationEnabled is True
-        assert user.settings.emailNotificationEnabled is False
+        assert user.settings.emailNotificationEnabled is True
         assert user.settings.geofenceEnabled is False
 
     def test_invalid_setting_keys_ignored(self):
@@ -361,7 +361,7 @@ class TestUpdateFields:
         user = _make_user()
         user.update_fields({"settings": {"pushNotificationEnabled": True}})
         assert user.settings.pushNotificationEnabled is True
-        assert user.settings.emailNotificationEnabled is False
+        assert user.settings.emailNotificationEnabled is True
 
     def test_settings_invalid_key_raises(self):
         user = _make_user()
