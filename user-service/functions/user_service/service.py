@@ -3,10 +3,11 @@ Service layer for user operations
 Handles business logic and validation
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from botocore.exceptions import ClientError
 from models import User
 from repository import UserRepository
+from username_generator import UsernameGenerator
 from http_utils import HttpStatus, http_response, error_response, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -19,15 +20,23 @@ class UserService:
     Encapsulates business logic and validation
     """
     
-    def __init__(self, repository: UserRepository):
+    def __init__(self, repository: UserRepository, username_generator: Optional[UsernameGenerator] = None):
         """
         Initialize UserService with repository dependency
         
         Args:
             repository: UserRepository instance for data access
+            username_generator: Optional injected generator for testability
         """
         self.repository = repository
-    
+        self.username_generator = username_generator or UsernameGenerator(repository)
+
+    @staticmethod
+    def _is_missing_username(username: Any) -> bool:
+        if username is None:
+            return True
+        return isinstance(username, str) and not username.strip()
+
     def create_user(self, body: Dict[str, Any], request_id: str = None) -> Dict[str, Any]:
         """
         Create a new user
@@ -37,10 +46,13 @@ class UserService:
         Returns:
             API response with created user or error
         """
+        user_payload = dict(body)
+        if self._is_missing_username(user_payload.get('username')):
+            user_payload['username'] = self.username_generator.generate_unique_username()
         
         # Validate with Pydantic model
         try:
-            user = User(**body)
+            user = User(**user_payload)
         except ValueError as e:
             return error_response(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, str(e))
         

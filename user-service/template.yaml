@@ -192,6 +192,8 @@ Resources:
     Properties:
       CodeUri: functions/hello_world/
       Handler: hello_world_handler.lambda_handler
+      MemorySize: 128
+      Layers: []
       Events:
         HelloWorld:
           Type: HttpApi
@@ -208,6 +210,7 @@ Resources:
     Properties:
       CodeUri: functions/user_service/
       Handler: user_service_handler.lambda_handler
+      MemorySize: 512
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable

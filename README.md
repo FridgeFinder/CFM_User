@@ -72,82 +72,60 @@ Follow these steps to get Dynamodb running locally
 
 ```sh
 cd user-service/
-sam build --use-container
+make build
 ```
 
 ### 2. Test Health Check Endpoint
 
 ```sh
-sam local invoke HelloWorldFunction --event events/event.json
+cd user-service/
+make invoke-hello
 ```
+
 Expected response: `{"statusCode": 200, "body": "{\"message\": \"hello user service\"}"}`
 
 ### 3. Test User Service Functions with Events
 
 **Create a new user:**
 ```sh
-sam local invoke UserServiceFunction \
-  --event events/create-user.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-create-user
 ```
 
 **Get user profile:**
 ```sh
-sam local invoke UserServiceFunction \
-  --event events/get-user.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-get-user
 ```
 
 **Get user profile: internal**
 ```sh
-sam local invoke InternalUserServiceFunction \
-  --event events/internal-get-user.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-internal-get-user
 ```
 
 **Update user profile:**
 ```sh
-sam local invoke UserServiceFunction \
-  --event events/update-user.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-update-user
 ```
 
 **Test user promotion (Neighbor → Volunteer):**
 ```sh
-sam local invoke UserServiceFunction \
-  --event events/update-user-promote-steward.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-promote-user
 ```
 
 **Test unauthorized access (should return 403):**
 ```sh
-sam local invoke UserServiceFunction \
-  --event events/unauthorized-access.json \
-  --parameter-overrides \
-    ParameterKey=DeploymentTarget,ParameterValue=local \
-    ParameterKey=Stage,ParameterValue=dev \
-    ParameterKey=FirebaseProjectId,ParameterValue=your-firebase-project-id \
-  --docker-network cfm-network
+cd user-service/
+make invoke-unauthorized
+```
+
+**Delete user profile:**
+```sh
+cd user-service/
+make invoke-delete-user
 ```
 
 **Note:** The `--docker-network cfm-network` flag ensures the Lambda can communicate with LocalStack DynamoDB running in Docker.
@@ -177,11 +155,23 @@ pip install -r tests/requirements.txt
 pip install -r functions/user_service/requirements.txt
 ```
 
+Make equivalent:
+```sh
+cd user-service/
+make install
+```
+
 ### 3. Run all unit tests
 
 ```sh
 # From user-service/ with the virtual environment activated
 pytest tests/unit/ -v
+```
+
+Make equivalent:
+```sh
+cd user-service/
+make test
 ```
 
 ### 4. Run a specific test file
@@ -206,6 +196,12 @@ pytest tests/unit/ --cov=functions --cov=layers --cov-report=term-missing
 pytest tests/unit/ --cov=functions --cov=layers  --cov-report=html
 ```
 
+Make equivalent:
+```sh
+cd user-service/
+make test-cov
+```
+
 ---
 
 ## Deploying to AWS
@@ -218,10 +214,9 @@ Deployments use `user-service/samconfig_local.toml`, which defines configuration
 > - `YOUR_HOSTED_ZONE_ID` — your Route 53 Hosted Zone ID
 
 ### 1. Build
-
 ```sh
 cd user-service/
-sam build --use-container
+make build
 ```
 
 ### 2. Deploy
@@ -235,6 +230,14 @@ sam deploy --config-env staging --config-file samconfig_local.toml
 
 # Deploy to production
 sam deploy --config-env prod --config-file samconfig_local.toml
+```
+
+Make equivalent:
+```sh
+cd user-service/
+make deploy ENV=dev
+make deploy ENV=staging
+make deploy ENV=prod
 ```
 
 Each command will show a changeset and prompt for confirmation before applying changes.

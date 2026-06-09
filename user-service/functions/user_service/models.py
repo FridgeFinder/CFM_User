@@ -3,7 +3,10 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 from validation_utils import validate_username as _validate_username_format
+from boto3.dynamodb.types import TypeDeserializer
 import re
+
+_deserializer = TypeDeserializer()
 
 
 def get_utc_timestamp() -> str:
@@ -171,9 +174,7 @@ class User(BaseModel):
         Decodes AttributeValues to Python primitives using boto3's TypeDeserializer,
         then delegates to from_dict.
         """
-        from boto3.dynamodb.types import TypeDeserializer
-        deserializer = TypeDeserializer()
-        python_item = {k: deserializer.deserialize(v) for k, v in item.items()}
+        python_item = {k: _deserializer.deserialize(v) for k, v in item.items()}
         return cls.from_dict(python_item)
     
     def update_fields(self, updates: Dict[str, Any]) -> None:

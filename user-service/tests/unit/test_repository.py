@@ -1,7 +1,7 @@
 """
 Unit tests for functions/user_service/repository.py
 Covers: UserRepository – get_user_by_id, create_user, update_user,
-        delete_user, user_exists.
+    delete_user, user_exists, is_username_available.
 All DynamoDB calls are mocked.
 """
 import pytest
@@ -178,3 +178,33 @@ class TestUserExists:
         repo.user_exists("u-1")
 
         mock_client.get_item.assert_called_once()
+
+
+# ── is_username_available ─────────────────────────────────────────────────
+
+class TestIsUsernameAvailable:
+    def test_returns_true_when_count_is_zero(self):
+        mock_client, repo = _make_repo()
+        mock_client.query.return_value = {"Count": 0}
+
+        assert repo.is_username_available("new_name") is True
+
+    def test_returns_false_when_count_is_non_zero(self):
+        mock_client, repo = _make_repo()
+        mock_client.query.return_value = {"Count": 1}
+
+        assert repo.is_username_available("taken_name") is False
+
+    def test_queries_username_index_with_expected_expression(self):
+        mock_client, repo = _make_repo()
+        mock_client.query.return_value = {"Count": 0}
+
+        repo.is_username_available("my_name")
+
+        kwargs = mock_client.query.call_args.kwargs
+        assert kwargs["TableName"] == TABLE
+        assert kwargs["IndexName"] == "username-index"
+        assert kwargs["KeyConditionExpression"] == "username = :username"
+        assert kwargs["ExpressionAttributeValues"] == {":username": {"S": "my_name"}}
+        assert kwargs["Limit"] == 1
+        assert kwargs["Select"] == "COUNT"

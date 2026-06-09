@@ -48,6 +48,28 @@ class UserRepository:
             Item=python_to_dynamodb(user_data),
             ConditionExpression='attribute_not_exists(userId)'
         )
+
+    def is_username_available(self, username: str) -> bool:
+        """
+        Check if a username is available (not already used by another user).
+
+        Args:
+            username: Username to check.
+
+        Returns:
+            True when username is available, otherwise False.
+        """
+        result = self.dynamodb_client.query(
+            TableName=self.table_name,
+            IndexName='username-index',
+            KeyConditionExpression='username = :username',
+            ExpressionAttributeValues={
+                ':username': {'S': username}
+            },
+            Limit=1,
+            Select='COUNT'
+        )
+        return result.get('Count', 0) == 0
     
     def update_user(self, user_data: Dict[str, Any], previous_last_updated: str) -> None:
         """

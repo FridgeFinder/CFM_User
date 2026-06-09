@@ -74,6 +74,29 @@ class TestCreateUser:
         body = json.loads(result["body"])
         assert body["user"]["userType"] == "Neighbor"
 
+    def test_generates_username_when_missing(self):
+        mock_repo, svc = _make_service()
+        svc.username_generator = MagicMock()
+        svc.username_generator.generate_unique_username.return_value = "BraveBerry1234"
+
+        result = svc.create_user({"userId": "u-generated"})
+
+        assert result["statusCode"] == HttpStatus.CREATED
+        body = json.loads(result["body"])
+        assert body["user"]["username"] == "BraveBerry1234"
+        svc.username_generator.generate_unique_username.assert_called_once()
+
+    def test_does_not_generate_username_when_provided(self):
+        _, svc = _make_service()
+        svc.username_generator = MagicMock()
+
+        result = svc.create_user({"userId": "u1", "username": "provided_name"})
+
+        assert result["statusCode"] == HttpStatus.CREATED
+        body = json.loads(result["body"])
+        assert body["user"]["username"] == "provided_name"
+        svc.username_generator.generate_unique_username.assert_not_called()
+
 
 # ── get_user ───────────────────────────────────────────────────────────────
 
