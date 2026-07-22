@@ -47,11 +47,11 @@ class TestDynamodbToDict:
     def test_multiple_fields(self):
         item = {
             "email": {"S": "x@y.com"},
-            "fcmToken": {"S": "tok123"},
+            "settings": {"M": {"pushNotificationEnabled": {"BOOL": True}}},
         }
         result = internal_app._dynamodb_to_dict(item)
         assert result["email"] == "x@y.com"
-        assert result["fcmToken"] == "tok123"
+        assert result["settings"]["pushNotificationEnabled"] is True
 
 
 # ── get_user_details ───────────────────────────────────────────────────────
@@ -64,7 +64,6 @@ class TestGetUserDetails:
     def test_returns_projected_dict_when_found(self):
         item = {
             "email": {"S": "u@example.com"},
-            "fcmToken": {"S": "tok"},
             "settings": {"M": {"pushNotificationEnabled": {"BOOL": True}}},
         }
         with patch.object(internal_app, "dynamodb") as mock_ddb:
@@ -72,7 +71,7 @@ class TestGetUserDetails:
             result = internal_app.get_user_details("u-1", self._mock_logger())
 
         assert result["email"] == "u@example.com"
-        assert result["fcmToken"] == "tok"
+        assert result["settings"]["pushNotificationEnabled"] is True
 
     def test_returns_none_when_not_found(self):
         with patch.object(internal_app, "dynamodb") as mock_ddb:
@@ -89,7 +88,6 @@ class TestGetUserDetails:
         kwargs = mock_ddb.get_item.call_args.kwargs
         assert "ProjectionExpression" in kwargs
         assert "email" in kwargs["ProjectionExpression"]
-        assert "fcmToken" in kwargs["ProjectionExpression"]
         assert "settings" in kwargs["ProjectionExpression"]
 
 

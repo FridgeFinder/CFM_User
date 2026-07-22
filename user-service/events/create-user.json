@@ -31,6 +31,6 @@
       }
     }
   },
-  "body": "{\"userId\":\"firebase-user-123\",\"email\":\"mariame.kaba@example.com\",\"phoneNumber\":\"+1234567890\",\"zipcode\":\"90210\",\"fcmToken\":\"fcm-token-abc123\"}",
+  "body": "{\"userId\":\"firebase-user-123\",\"email\":\"mariame.kaba@example.com\",\"phoneNumber\":\"+1234567890\",\"zipcode\":\"90210\"}",
   "isBase64Encoded": false
 }

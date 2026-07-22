@@ -236,3 +236,5 @@ class TestDeleteUser:
         svc.delete_user("ghost")
 
         mock_repo.delete_user.assert_not_called()
+
+

@@ -77,7 +77,6 @@ paths:
                   phoneNumber: "+15551234567"
                   zipcode: "12345"
                   userType: "Neighbor"
-                  fcmToken: "FCM_TOKEN"
                   settings:
                     pushNotificationEnabled: true
                     emailNotificationEnabled: true
@@ -267,7 +266,7 @@ paths:
       summary: Get user details (internal)
       description: |
         Service-to-service endpoint. Returns a projected subset of user data
-        (email, fcmToken, settings). Requires AWS IAM (SigV4) authentication —
+        (email, settings). Requires AWS IAM (SigV4) authentication —
         not accessible from the public internet.
       operationId: getInternalUser
       security:
@@ -296,6 +295,160 @@ paths:
           $ref: '#/components/responses/NotFound'
         '405':
           $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/{userId}/user-devices/{installationId}:
+    get:
+      tags:
+        - Users
+      summary: Get a registered device
+      description: Retrieve a single device registration record. Users can only access their own devices.
+      operationId: getUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      responses:
+        '200':
+          description: Device retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - device
+                properties:
+                  device:
+                    $ref: '#/components/schemas/UserDeviceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Users
+      summary: Register or update a device
+      description: |
+        Registers a device for push notifications. If a device with the same `userId` + `installationId`
+        already exists it is fully overwritten (upsert). Call this on each app launch or whenever the
+        push token changes.
+      operationId: registerUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+            examples:
+              ios:
+                summary: iOS device registration
+                value:
+                  token: "apns-device-token-abc123"
+                  platform: "ios"
+              android:
+                summary: Android device registration
+                value:
+                  token: "fcm-device-token-xyz789"
+                  platform: "android"
+      responses:
+        '204':
+          description: Device registered or updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - Users
+      summary: Update a device capability state
+      description: |
+        Partially updates a user device record. This is intended for app lifecycle sync
+        when OS-level notification permission changes.
+      operationId: updateUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserDeviceRequest'
+            examples:
+              disable:
+                summary: Device notifications disabled at OS level
+                value:
+                  notificationsEnabled: false
+              enable:
+                summary: Device notifications re-enabled
+                value:
+                  notificationsEnabled: true
+      responses:
+        '200':
+          description: Device updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - device
+                properties:
+                  device:
+                    $ref: '#/components/schemas/UserDeviceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Users
+      summary: Unregister a device
+      description: |
+        Removes a device from push notification delivery. Users can only unregister their own devices.
+        Returns 204 even if the device was not found (idempotent).
+      operationId: unregisterUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      responses:
+        '204':
+          description: Device unregistered successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -344,6 +497,13 @@ components:
       in: path
       required: true
       description: Unique user identifier (Firebase UID)
+      schema:
+        type: string
+    InstallationId:
+      name: installationId
+      in: path
+      required: true
+      description: Unique identifier for the device installation (e.g. UUID generated on first app launch)
       schema:
         type: string
 
@@ -422,10 +582,6 @@ components:
           maxLength: 10
           description: User's postal/zip code (international format)
           example: "12345"
-        fcmToken:
-          type: string
-          nullable: true
-          description: Firebase Cloud Messaging token for push notifications
         points:
           type: integer
           description: User reward points
@@ -488,10 +644,6 @@ components:
           pattern: '^[a-zA-Z0-9\s\-]+$'
           description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
           example: "12345"
-        fcmToken:
-          type: string
-          nullable: true
-          description: Firebase Cloud Messaging token
         settings:
           $ref: '#/components/schemas/Settings'
 
@@ -525,9 +677,6 @@ components:
           maxLength: 10
           pattern: '^[a-zA-Z0-9\s\-]+$'
           description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
-        fcmToken:
-          type: string
-          nullable: true
         points:
           type: integer
         settings:
@@ -546,12 +695,97 @@ components:
           format: email
           nullable: true
           description: User's email address
-        fcmToken:
-          type: string
-          nullable: true
-          description: Firebase Cloud Messaging token for push notifications
         settings:
           $ref: '#/components/schemas/Settings'
+
+    DevicePlatform:
+      type: string
+      enum:
+        - ios
+        - android
+        - web
+        - unknown
+      description: Device operating system / platform
+
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: Push notification token (APNs, FCM, etc.)
+          example: "apns-device-token-abc123"
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+      additionalProperties: false
+
+    UpdateUserDeviceRequest:
+      type: object
+      properties:
+        notificationsEnabled:
+          type: boolean
+          description: Whether this device can currently receive push notifications
+        invalidAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional timestamp for marking a token invalid
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: Last client sync timestamp (ISO 8601)
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last successful delivery timestamp (ISO 8601)
+      minProperties: 1
+      additionalProperties: false
+
+    UserDeviceRecord:
+      type: object
+      required:
+        - userId
+        - installationId
+        - token
+        - notificationsEnabled
+        - createdAt
+        - lastSeenAt
+      properties:
+        userId:
+          type: string
+          description: Firebase UID of the device owner
+        installationId:
+          type: string
+          description: Unique installation identifier
+        token:
+          type: string
+          description: Push notification token
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        notificationsEnabled:
+          type: boolean
+          description: Whether push notifications are enabled for this device
+          default: true
+        createdAt:
+          type: string
+          format: date-time
+          description: When the device was first registered (ISO 8601)
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: Last time a registration request was received for this device (ISO 8601)
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last time a notification was successfully delivered to this device (ISO 8601)
+        invalidAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the token was marked invalid (ISO 8601)
 
     UserResponse:
       type: object

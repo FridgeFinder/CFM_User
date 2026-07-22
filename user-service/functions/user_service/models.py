@@ -76,7 +76,6 @@ class User(BaseModel):
     email: Optional[str] = None
     phoneNumber: Optional[str] = None
     zipcode: Optional[str] = None
-    fcmToken: Optional[str] = None #TODO: Consider making this a set to allow for multiple devices to receive notifications
     settings: UserSettings = Field(default_factory=UserSettings)
     
     # Timestamps with defaults (ISO 8601 with Z suffix for frontend compatibility)
@@ -215,7 +214,7 @@ class User(BaseModel):
         # Fields that can be updated (excluding userType - handled above)
         allowed_fields = {
             'email', 'phoneNumber', 'username', 'points',
-            'zipcode', 'fcmToken', 'lastLoginAt', 'settings'
+            'zipcode', 'lastLoginAt', 'settings'
         }
         
         # Apply updates

@@ -1,7 +1,7 @@
 """
 Internal Lambda handler for service-to-service user queries.
 Authentication: IAM (SigV4) - no Firebase JWT required.
-Returns a projected subset of user data (email, fcmToken, settings).
+Returns a projected subset of user data (email, settings).
 """
 import os
 import logging
@@ -48,13 +48,13 @@ def _dynamodb_to_dict(item: Dict) -> Dict:
 # ---------------------------------------------------------------------------
 
 def get_user_details(user_id: str, logger: logging.LoggerAdapter) -> Optional[Dict]:
-    """Fetch email, fcmToken, and settings from the users table."""
+    """Fetch email and settings from the users table."""
     logger.info("Fetching user details", extra={"user_id": user_id})
 
     resp = dynamodb.get_item(
         TableName=USERS_TABLE,
         Key={"userId": {"S": user_id}},
-        ProjectionExpression="email, fcmToken, settings",
+        ProjectionExpression="email, settings",
     )
 
     if "Item" not in resp:

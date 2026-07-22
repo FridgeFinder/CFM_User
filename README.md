@@ -64,6 +64,15 @@ Follow these steps to get Dynamodb running locally
     $ ./scripts/create_local_dynamodb_tables.py
     ```
 
+  This creates both:
+  - `users_dev`
+  - `user_devices_dev`
+
+  You can verify with:
+  ```sh
+  $ aws dynamodb list-tables --endpoint-url http://localhost:4566
+  ```
+
 ---
 
 ## Build and Test Locally
@@ -126,6 +135,30 @@ make invoke-unauthorized
 ```sh
 cd user-service/
 make invoke-delete-user
+```
+
+**Register user device:**
+```sh
+cd user-service/
+make invoke-register-user-device
+```
+
+**Get user device:**
+```sh
+cd user-service/
+make invoke-get-user-device
+```
+
+**Patch user device (disable notifications):**
+```sh
+cd user-service/
+make invoke-patch-user-device
+```
+
+**Unregister user device:**
+```sh
+cd user-service/
+make invoke-unregister-user-device
 ```
 
 **Note:** The `--docker-network cfm-network` flag ensures the Lambda can communicate with LocalStack DynamoDB running in Docker.

@@ -19,6 +19,7 @@ Globals:
     Environment:
       Variables:
         USERS_TABLE: !Sub users_${Environment}
+        USER_DEVICES_TABLE: !Sub user_devices_${Environment}
         FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
         DEPLOYMENT_TARGET: !Ref DeploymentTarget
     LoggingConfig:
@@ -134,6 +135,32 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES  # Capture full item state for delete events
 
+  # DynamoDB Table for User Devices
+  UserDevicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub user_devices_${Environment}
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: installationId
+          AttributeType: S
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: installationId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: token-index
+          KeySchema:
+            - AttributeName: token
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+      BillingMode: PAY_PER_REQUEST
+
   # Map custom domain to HTTP API
   ApiMapping:
     Type: AWS::ApiGatewayV2::ApiMapping
@@ -240,6 +267,42 @@ Resources:
             Path: /v1/users/{userId}
             Method: delete
 
+  # Dedicated Lambda for user-device lifecycle routes
+  UserDeviceServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_devices/
+      Handler: user_device_service_handler.lambda_handler
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserDevicesTable
+      Events:
+        GetUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: get
+        PatchUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: patch
+        RegisterUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: post
+        UnregisterUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: delete
+
   # Username Availability Check Function (Public endpoint, no auth)
   UsernameCheckFunction:
     Type: AWS::Serverless::Function
@@ -281,6 +344,63 @@ Resources:
             ApiId: !Ref InternalHttpApi
             Path: /internal/v1/users/{userId}
             Method: get
+
+  # Firebase Cleanup Lambda Function (consumes user deletion events)
+  FirebaseUserCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/firebase_user_cleanup/
+      Handler: firebase_user_cleanup_handler.lambda_handler
+      Timeout: 30
+      Layers: []
+      Environment:
+        Variables:
+          FIREBASE_SERVICE_ACCOUNT_SECRET_NAME: !Sub firebase-service-account-${Environment}
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:firebase-service-account-${Environment}*
+      Events:
+        OnUserDeleted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref UserEventBus
+            Pattern:
+              source:
+                - user-service
+              detail-type:
+                - User Deleted
+
+  UserDeviceCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_device_cleanup/
+      Handler: user_device_cleanup_handler.lambda_handler
+      Timeout: 30
+      Layers: []
+      Environment:
+        Variables:
+          USER_DEVICES_TABLE: !Ref UserDevicesTable
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:BatchWriteItem
+            Resource:
+              - !GetAtt UserDevicesTable.Arn
+      Events:
+        OnUserDeleted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref UserEventBus
+            Pattern:
+              source:
+                - user-service
+              detail-type:
+                - User Deleted
 
   # EventBridge Bus for User Service Events
   UserEventBus:
@@ -391,6 +511,10 @@ Outputs:
   UsersTableName:
     Description: DynamoDB Users Table Name
     Value: !Ref UsersTable
+
+  UserDevicesTableName:
+    Description: DynamoDB User Devices Table Name
+    Value: !Ref UserDevicesTable
   
   CustomDomainUrl:
     Description: Custom domain URL for the User API
@@ -419,6 +543,10 @@ Outputs:
   UserServiceFunctionArn:
     Description: User Service Lambda Function ARN
     Value: !GetAtt UserServiceFunction.Arn
+
+  UserDeviceServiceFunctionArn:
+    Description: User Device Service Lambda Function ARN
+    Value: !GetAtt UserDeviceServiceFunction.Arn
   
   UserEventBusArn:
     Description: EventBridge Bus ARN for user events (used by other services)
@@ -439,6 +567,14 @@ Outputs:
   InternalUserServiceFunctionArn:
     Description: Internal User Service Lambda Function ARN (for service-to-service calls)
     Value: !GetAtt InternalUserServiceFunction.Arn
+
+  FirebaseUserCleanupFunctionArn:
+    Description: Firebase cleanup Lambda Function ARN
+    Value: !GetAtt FirebaseUserCleanupFunction.Arn
+
+  UserDeviceCleanupFunctionArn:
+    Description: User device cleanup Lambda Function ARN
+    Value: !GetAtt UserDeviceCleanupFunction.Arn
 
   InternalApiBaseUrl:
     Description: Base URL for internal IAM-authenticated routes

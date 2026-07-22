@@ -29,7 +29,6 @@ def _dynamo_user_item(user_id: str = "u-1") -> dict:
         "points": {"N": "0"},
         "settings": {
             "M": {
-                "pushNotificationEnabled": {"BOOL": False},
                 "emailNotificationEnabled": {"BOOL": True},
                 "geofenceEnabled": {"BOOL": False},
             }

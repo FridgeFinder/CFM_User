@@ -34,4 +34,5 @@ for _p in _paths:
 # ── environment variables ──────────────────────────────────────────────────
 # USERS_TABLE is read at module import time by the Lambda handlers.
 os.environ.setdefault("USERS_TABLE", "test-users-table")
+os.environ.setdefault("USER_DEVICES_TABLE", "test-user-devices-table")
 os.environ.setdefault("DEPLOYMENT_TARGET", "test")

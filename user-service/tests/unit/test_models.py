@@ -94,7 +94,6 @@ class TestUserCreation:
         assert user.email is None
         assert user.phoneNumber is None
         assert user.zipcode is None
-        assert user.fcmToken is None
 
     def test_extra_fields_rejected(self):
         with pytest.raises(ValidationError):
@@ -107,7 +106,6 @@ class TestUserCreation:
             email="beaver@example.com",
             phoneNumber="+1 (555) 000-1234",
             zipcode="10001",
-            fcmToken="tok",
             userType=UserType.VOLUNTEER.value,
             points=10,
         )
@@ -115,7 +113,6 @@ class TestUserCreation:
         assert user.email == "beaver@example.com"
         assert user.phoneNumber == "15550001234"
         assert user.zipcode == "10001"
-        assert user.fcmToken == "tok"
         assert user.userType == UserType.VOLUNTEER.value
         assert user.points == 10
 
@@ -377,3 +374,5 @@ class TestUpdateFields:
         user = _make_user(email="existing@example.com")
         user.update_fields({"email": "   "})
         assert user.email is None
+class TestPushDeviceHelpers:
+    pass

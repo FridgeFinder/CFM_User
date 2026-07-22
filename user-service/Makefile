@@ -1,4 +1,4 @@
-.PHONY: build deploy install invoke-hello invoke-create-user invoke-get-user invoke-internal-get-user invoke-update-user invoke-promote-user invoke-delete-user invoke-unauthorized test test-cov clean
+.PHONY: build deploy install invoke-hello invoke-create-user invoke-get-user invoke-internal-get-user invoke-update-user invoke-promote-user invoke-delete-user invoke-unauthorized invoke-register-user-device invoke-get-user-device invoke-patch-user-device invoke-unregister-user-device test test-cov clean
 
 # -----------------------------------------------------------------------------
 # Config
@@ -7,6 +7,7 @@ ENV ?= dev
 DEPLOYMENT_TARGET ?= local
 FIREBASE_PROJECT_ID ?= your-firebase-project-id
 USER_FUNCTION ?= UserServiceFunction
+USER_DEVICE_FUNCTION ?= UserDeviceServiceFunction
 INTERNAL_FUNCTION ?= InternalUserServiceFunction
 HELLO_FUNCTION ?= HelloWorldFunction
 DOCKER_NETWORK ?= cfm-network
@@ -19,9 +20,9 @@ DOCKER_NETWORK ?= cfm-network
 build:
 	sam build --use-container
 
-## Deploy using samconfig_local.toml (ENV=dev|staging|prod)
+## Deploy using samconfig.toml (ENV=dev|staging|prod)
 deploy:
-	sam deploy --config-env $(ENV) --config-file samconfig_local.toml
+	sam deploy --config-env $(ENV) --config-file samconfig.toml
 
 # -----------------------------------------------------------------------------
 # Local invokes
@@ -95,6 +96,46 @@ invoke-delete-user:
 invoke-unauthorized:
 	sam local invoke $(USER_FUNCTION) \
 		--event events/unauthorized-access.json \
+		--parameter-overrides \
+			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
+			ParameterKey=Environment,ParameterValue=$(ENV) \
+			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
+		--docker-network $(DOCKER_NETWORK)
+
+## Invoke POST /v1/users/{userId}/user-devices/{installationId}
+invoke-register-user-device:
+	sam local invoke $(USER_DEVICE_FUNCTION) \
+		--event events/register-user-device.json \
+		--parameter-overrides \
+			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
+			ParameterKey=Environment,ParameterValue=$(ENV) \
+			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
+		--docker-network $(DOCKER_NETWORK)
+
+## Invoke GET /v1/users/{userId}/user-devices/{installationId}
+invoke-get-user-device:
+	sam local invoke $(USER_DEVICE_FUNCTION) \
+		--event events/get-user-device.json \
+		--parameter-overrides \
+			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
+			ParameterKey=Environment,ParameterValue=$(ENV) \
+			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
+		--docker-network $(DOCKER_NETWORK)
+
+## Invoke PATCH /v1/users/{userId}/user-devices/{installationId}
+invoke-patch-user-device:
+	sam local invoke $(USER_DEVICE_FUNCTION) \
+		--event events/patch-user-device.json \
+		--parameter-overrides \
+			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
+			ParameterKey=Environment,ParameterValue=$(ENV) \
+			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
+		--docker-network $(DOCKER_NETWORK)
+
+## Invoke DELETE /v1/users/{userId}/user-devices/{installationId}
+invoke-unregister-user-device:
+	sam local invoke $(USER_DEVICE_FUNCTION) \
+		--event events/unregister-user-device.json \
 		--parameter-overrides \
 			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
 			ParameterKey=Environment,ParameterValue=$(ENV) \

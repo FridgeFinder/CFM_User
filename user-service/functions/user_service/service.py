@@ -20,7 +20,11 @@ class UserService:
     Encapsulates business logic and validation
     """
     
-    def __init__(self, repository: UserRepository, username_generator: Optional[UsernameGenerator] = None):
+    def __init__(
+        self,
+        repository: UserRepository,
+        username_generator: Optional[UsernameGenerator] = None,
+    ):
         """
         Initialize UserService with repository dependency
         
@@ -148,3 +152,4 @@ class UserService:
         # Delete from database
         self.repository.delete_user(user_id)        
         return http_response(HttpStatus.NO_CONTENT, None, request_id)
+
