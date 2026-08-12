@@ -1,4 +1,4 @@
-.PHONY: build deploy install invoke-hello invoke-create-user invoke-get-user invoke-internal-get-user invoke-update-user invoke-promote-user invoke-delete-user invoke-unauthorized invoke-register-user-device invoke-get-user-device invoke-patch-user-device invoke-unregister-user-device test test-cov clean
+.PHONY: build deploy install invoke-hello invoke-create-user invoke-get-user invoke-internal-get-user invoke-update-user invoke-promote-user invoke-delete-user invoke-unauthorized invoke-register-user-device invoke-get-user-device invoke-patch-user-device invoke-unregister-user-device invoke-username-suggestions test test-cov clean
 
 # -----------------------------------------------------------------------------
 # Config
@@ -10,6 +10,7 @@ USER_FUNCTION ?= UserServiceFunction
 USER_DEVICE_FUNCTION ?= UserDeviceServiceFunction
 INTERNAL_FUNCTION ?= InternalUserServiceFunction
 HELLO_FUNCTION ?= HelloWorldFunction
+USERNAME_SUGGESTIONS_FUNCTION ?= UsernameSuggestionsFunction
 DOCKER_NETWORK ?= cfm-network
 
 # -----------------------------------------------------------------------------
@@ -136,6 +137,16 @@ invoke-patch-user-device:
 invoke-unregister-user-device:
 	sam local invoke $(USER_DEVICE_FUNCTION) \
 		--event events/unregister-user-device.json \
+		--parameter-overrides \
+			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
+			ParameterKey=Environment,ParameterValue=$(ENV) \
+			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
+		--docker-network $(DOCKER_NETWORK)
+
+## Invoke GET /users/username-suggestions?count=NUMBER
+invoke-username-suggestions:
+	sam local invoke $(USERNAME_SUGGESTIONS_FUNCTION) \
+		--event events/username-suggestions.json \
 		--parameter-overrides \
 			ParameterKey=DeploymentTarget,ParameterValue=$(DEPLOYMENT_TARGET) \
 			ParameterKey=Environment,ParameterValue=$(ENV) \

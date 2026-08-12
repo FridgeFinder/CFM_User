@@ -64,7 +64,6 @@ class TestEnums:
 
     def test_user_settings_defaults_are_false(self):
         s = UserSettings()
-        assert s.pushNotificationEnabled is False
         assert s.emailNotificationEnabled is True
         assert s.geofenceEnabled is False
 
@@ -254,14 +253,13 @@ class TestZipcodeValidation:
 
 class TestSettingsValidation:
     def test_partial_settings_fills_defaults(self):
-        user = _make_user(settings={"pushNotificationEnabled": True})
-        assert user.settings.pushNotificationEnabled is True
-        assert user.settings.emailNotificationEnabled is True
+        user = _make_user(settings={"emailNotificationEnabled": False})
+        assert user.settings.emailNotificationEnabled is False
         assert user.settings.geofenceEnabled is False
 
     def test_invalid_setting_keys_ignored(self):
         # UserSettings uses extra="ignore" so unknown keys are silently dropped
-        user = _make_user(settings={"pushNotificationEnabled": True, "bogusKey": True})
+        user = _make_user(settings={"emailNotificationEnabled": False, "bogusKey": True})
         assert not hasattr(user.settings, "bogusKey")
 
     def test_empty_settings_uses_all_defaults(self):
@@ -300,7 +298,6 @@ class TestSerialization:
             "points": {"N": "5"},
             "settings": {
                 "M": {
-                    "pushNotificationEnabled": {"BOOL": True},
                     "emailNotificationEnabled": {"BOOL": False},
                     "geofenceEnabled": {"BOOL": False},
                 }
@@ -313,7 +310,7 @@ class TestSerialization:
         assert user.userId == "berry-user"
         assert user.userType == "Volunteer"
         assert user.points == 5
-        assert user.settings.pushNotificationEnabled is True
+        assert user.settings.emailNotificationEnabled is False
 
 
 # ── update_fields ──────────────────────────────────────────────────────────
@@ -356,8 +353,8 @@ class TestUpdateFields:
 
     def test_settings_merge_patch_behavior(self):
         user = _make_user()
-        user.update_fields({"settings": {"pushNotificationEnabled": True}})
-        assert user.settings.pushNotificationEnabled is True
+        user.update_fields({"settings": {"geofenceEnabled": True}})
+        assert user.settings.geofenceEnabled is True
         assert user.settings.emailNotificationEnabled is True
 
     def test_settings_invalid_key_raises(self):

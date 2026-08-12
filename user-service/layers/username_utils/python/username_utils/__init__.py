@@ -1,0 +1,1 @@
+from .username_generator import UsernameGenerator

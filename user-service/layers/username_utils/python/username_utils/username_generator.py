@@ -1,6 +1,4 @@
-"""
-Username generation utilities.
-"""
+"""Username generation utilities."""
 import random
 
 
@@ -45,13 +43,11 @@ class UsernameGenerator:
         "Wheat", "Yam", "Yuca"
     ]
 
-    def __init__(self, repository: 'UserRepository'):
+    def __init__(self, repository):
         self.repository = repository
 
-
     def _generate_candidate(self, suffix_length: int) -> str:
-        """There are 10^4 possible suffixes for each adjective/noun pair, making collisions unlikely.
-        10^4*123*150= 184 million possible usernames with the current word lists and suffix length."""
+        """Generate a candidate username using adjective+noun+numeric suffix."""
         adjective = random.choice(self.ADJECTIVES)
         noun = random.choice(self.FOOD_NOUNS)
         suffix = ''.join(random.choice(self.CHARSET) for _ in range(suffix_length))

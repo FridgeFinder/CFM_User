@@ -4,7 +4,7 @@ Unit tests for functions/user_service/username_generator.py
 from unittest.mock import MagicMock, patch
 import pytest
 
-from username_generator import UsernameGenerator
+from username_utils import UsernameGenerator
 
 
 def _make_generator():
@@ -18,7 +18,7 @@ class TestUsernameGenerator:
         repo.is_username_available.return_value = True
 
         with patch(
-            'username_generator.random.choice',
+            'username_utils.username_generator.random.choice',
             side_effect=['Active', 'Apple', 'A', 'B', 'C', 'D'],
         ):
             username = generator.generate_unique_username(max_attempts=1)
@@ -31,7 +31,7 @@ class TestUsernameGenerator:
         repo.is_username_available.side_effect = [False, True]
 
         with patch(
-            'username_generator.random.choice',
+            'username_utils.username_generator.random.choice',
             side_effect=[
                 'Active', 'Apple', 'A', 'B', 'C', 'D',
                 'Brave', 'Berry', '1', '2', '3', '4', '5', '6',
@@ -46,6 +46,6 @@ class TestUsernameGenerator:
         repo, generator = _make_generator()
         repo.is_username_available.return_value = False
 
-        with patch('username_generator.random.choice', return_value='A'):
+        with patch('username_utils.username_generator.random.choice', return_value='A'):
             with pytest.raises(RuntimeError, match='Unable to generate an available username'):
                 generator.generate_unique_username(max_attempts=1)

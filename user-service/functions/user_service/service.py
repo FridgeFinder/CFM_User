@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from botocore.exceptions import ClientError
 from models import User
 from repository import UserRepository
-from username_generator import UsernameGenerator
+from username_utils import UsernameGenerator
 from http_utils import HttpStatus, http_response, error_response, ErrorCode
 
 logger = logging.getLogger(__name__)

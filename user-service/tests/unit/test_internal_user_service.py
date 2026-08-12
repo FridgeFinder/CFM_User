@@ -30,13 +30,13 @@ class TestDynamodbToDict:
         item = {
             "settings": {
                 "M": {
-                    "pushNotificationEnabled": {"BOOL": False},
+                    "emailNotificationEnabled": {"BOOL": False},
                     "geofenceEnabled": {"BOOL": True},
                 }
             }
         }
         result = internal_app._dynamodb_to_dict(item)
-        assert result["settings"]["pushNotificationEnabled"] is False
+        assert result["settings"]["emailNotificationEnabled"] is False
         assert result["settings"]["geofenceEnabled"] is True
 
     def test_list_type_with_strings(self):
@@ -47,11 +47,11 @@ class TestDynamodbToDict:
     def test_multiple_fields(self):
         item = {
             "email": {"S": "x@y.com"},
-            "settings": {"M": {"pushNotificationEnabled": {"BOOL": True}}},
+            "settings": {"M": {"emailNotificationEnabled": {"BOOL": True}}},
         }
         result = internal_app._dynamodb_to_dict(item)
         assert result["email"] == "x@y.com"
-        assert result["settings"]["pushNotificationEnabled"] is True
+        assert result["settings"]["emailNotificationEnabled"] is True
 
 
 # ── get_user_details ───────────────────────────────────────────────────────
@@ -64,14 +64,14 @@ class TestGetUserDetails:
     def test_returns_projected_dict_when_found(self):
         item = {
             "email": {"S": "u@example.com"},
-            "settings": {"M": {"pushNotificationEnabled": {"BOOL": True}}},
+            "settings": {"M": {"emailNotificationEnabled": {"BOOL": True}}},
         }
         with patch.object(internal_app, "dynamodb") as mock_ddb:
             mock_ddb.get_item.return_value = {"Item": item}
             result = internal_app.get_user_details("u-1", self._mock_logger())
 
         assert result["email"] == "u@example.com"
-        assert result["settings"]["pushNotificationEnabled"] is True
+        assert result["settings"]["emailNotificationEnabled"] is True
 
     def test_returns_none_when_not_found(self):
         with patch.object(internal_app, "dynamodb") as mock_ddb:

@@ -131,6 +131,15 @@ cd user-service/
 make invoke-unauthorized
 ```
 
+**Get username suggestions (public endpoint):**
+```sh
+cd user-service/
+make invoke-username-suggestions
+```
+
+By default this uses `events/username-suggestions.json` with `count=3`.
+To request a different number (1-20), edit `queryStringParameters.count` in that event file.
+
 **Delete user profile:**
 ```sh
 cd user-service/

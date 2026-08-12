@@ -16,6 +16,7 @@ Globals:
       - !Ref HttpUtilsLayer
       - !Ref DynamoUtilsLayer
       - !Ref ValidationUtilsLayer
+      - !Ref UsernameUtilsLayer
     Environment:
       Variables:
         USERS_TABLE: !Sub users_${Environment}
@@ -213,6 +214,17 @@ Resources:
         - python3.13
       RetentionPolicy: Delete
 
+  # Shared Lambda Layer: Username generation utilities
+  UsernameUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub username-utils-${Environment}
+      Description: Shared username generation utilities
+      ContentUri: layers/username_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
   # Health Check Lambda Function (No auth required)
   HelloWorldFunction:
     Type: AWS::Serverless::Function
@@ -321,6 +333,28 @@ Resources:
           Properties:
             ApiId: !Ref UserHttpApi
             Path: /v1/users/check-username/{username}
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+  # Username Suggestions Function (Public endpoint, no auth)
+  UsernameSuggestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/username_suggestions/
+      Handler: username_suggestions_handler.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: !Sub "${UsersTable.Arn}/index/username-index"
+      Events:
+        UsernameSuggestions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /users/username-suggestions
             Method: get
             Auth:
               Authorizer: NONE
