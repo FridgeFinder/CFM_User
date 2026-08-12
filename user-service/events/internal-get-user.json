@@ -1,0 +1,15 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "GET"
+    },
+    "authorizer": {
+      "iam": {
+        "userArn": "arn:aws:iam::123456789012:role/test-role"
+      }
+    }
+  },
+  "pathParameters": {
+    "userId": "firebase-user-123"
+  }
+}
