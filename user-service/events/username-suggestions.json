@@ -1,7 +1,7 @@
 {
   "version": "2.0",
-  "routeKey": "GET /users/username-suggestions",
-  "rawPath": "/users/username-suggestions",
+  "routeKey": "GET /v1/users/username-suggestions",
+  "rawPath": "/v1/users/username-suggestions",
   "rawQueryString": "count=3",
   "queryStringParameters": {
     "count": "3"
@@ -9,7 +9,7 @@
   "requestContext": {
     "http": {
       "method": "GET",
-      "path": "/users/username-suggestions"
+      "path": "/v1/users/username-suggestions"
     },
     "requestId": "local-request-id"
   },

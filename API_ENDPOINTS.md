@@ -139,7 +139,7 @@
 ---
 
 ## 6. Username Suggestions
-**GET** `/users/username-suggestions?count=NUMBER`
+**GET** `/v1/users/username-suggestions?count=NUMBER`
 - **Auth**: Not required (Public endpoint)
 - **Description**: Generate unique username suggestions that are validated against the users table.
 - **Query Params**:

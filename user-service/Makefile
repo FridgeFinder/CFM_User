@@ -143,7 +143,7 @@ invoke-unregister-user-device:
 			ParameterKey=FirebaseProjectId,ParameterValue=$(FIREBASE_PROJECT_ID) \
 		--docker-network $(DOCKER_NETWORK)
 
-## Invoke GET /users/username-suggestions?count=NUMBER
+## Invoke GET /v1/users/username-suggestions?count=NUMBER
 invoke-username-suggestions:
 	sam local invoke $(USERNAME_SUGGESTIONS_FUNCTION) \
 		--event events/username-suggestions.json \

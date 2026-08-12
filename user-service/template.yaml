@@ -354,7 +354,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref UserHttpApi
-            Path: /users/username-suggestions
+            Path: /v1/users/username-suggestions
             Method: get
             Auth:
               Authorizer: NONE

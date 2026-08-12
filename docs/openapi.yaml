@@ -258,7 +258,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /users/username-suggestions:
+  /v1/users/username-suggestions:
     get:
       tags:
         - Public
