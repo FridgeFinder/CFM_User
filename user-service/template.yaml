@@ -343,6 +343,7 @@ Resources:
     Properties:
       CodeUri: functions/username_suggestions/
       Handler: username_suggestions_handler.lambda_handler
+      MemorySize: 512
       Policies:
         - Statement:
           - Effect: Allow
