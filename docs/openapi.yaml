@@ -1,0 +1,1002 @@
+openapi: 3.0.3
+info:
+  title: FridgeFinder User Service API
+  description: |
+    User management API for the FridgeFinder
+    
+    ## Authentication
+    All endpoints (except username availability check) require Firebase JWT authentication.
+    Include the JWT token in the `Authorization` header as `Bearer <token>`.
+    
+    ## User Types
+    - **Organizer**: Coordinates the fridge network
+    - **Host**: Hosts a fridge at their location
+    - **Volunteer**: Maintains, fills, and cleans fridges
+    - **Neighbor**: Uses the community fridges
+    
+  version: 1.0.0
+  contact:
+    name: Fridge Finder
+    url: https://fridgefinder.app
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://users-api-dev.communityfridgefinder.com
+    description: Development environment
+  - url: https://users-api-staging.communityfridgefinder.com
+    description: Staging environment
+  - url: https://users-api-prod.communityfridgefinder.com
+    description: Production environment
+  - url: http://localhost:3000
+    description: Local development
+
+security:
+  - FirebaseAuth: []
+
+tags:
+  - name: Users
+    description: User management operations
+  - name: Public
+    description: Public endpoints (no authentication required)
+  - name: Internal
+    description: Service-to-service endpoints (IAM/SigV4 authentication)
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /v1/users:
+    post:
+      tags:
+        - Users
+      summary: Create a new user
+      description: |
+        Creates a new user account. Users can only create their own profile (userId must match authenticated user).
+        New users are automatically assigned the `Neighbor` user type.
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            examples:
+              basic:
+                summary: Basic user creation
+                value:
+                  userId: "firebase-user-123"
+                  username: "mariamekaba"
+                  email: "mariame@example.com"
+              full:
+                summary: Full user profile
+                value:
+                  userId: "firebase-user-123"
+                  username: "mariamekaba"
+                  email: "mariame@example.com"
+                  phoneNumber: "+15551234567"
+                  zipcode: "12345"
+                  userType: "Neighbor"
+                  settings:
+                    emailNotificationEnabled: true
+                    geofenceEnabled: false
+      responses:
+        '201':
+          description: User created successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: Request tracking ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/{userId}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: Retrieve user profile. Users can only access their own profile.
+      operationId: getUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - Users
+      summary: Update user profile
+      description: |
+        Partially update user profile. Users can only update their own profile.
+        Only provided fields will be updated; other fields remain unchanged.
+        
+        **User Type Transitions:**
+        - Users can change to `Neighbor` or `Volunteer` only
+        - Other transitions require admin privileges
+      operationId: updateUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            examples:
+              profile:
+                summary: Update profile fields
+                value:
+                  email: "newemail@example.com"
+                  zipcode: "54321"
+              settings:
+                summary: Update notification settings
+                value:
+                  settings:
+                    geofenceEnabled: true
+              volunteer:
+                summary: Become a volunteer
+                value:
+                  userType: "Volunteer"
+      responses:
+        '200':
+          description: User updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user account
+      description: Permanently delete user account. Users can only delete their own account.
+      operationId: deleteUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: User deleted successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/check-username/{username}:
+    get:
+      tags:
+        - Public
+      summary: Check username availability
+      description: |
+        Check if a username is available (not taken by another user).
+        This endpoint does not require authentication.
+      operationId: checkUsername
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          description: Username to check availability
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 30
+            pattern: '^[a-zA-Z0-9_-]+$'
+      responses:
+        '200':
+          description: Username availability status
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - available
+                properties:
+                  available:
+                    type: boolean
+                    description: Whether the username is available
+              examples:
+                available:
+                  summary: Username is available
+                  value:
+                    available: true
+                taken:
+                  summary: Username is taken
+                  value:
+                    available: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/username-suggestions:
+    get:
+      tags:
+        - Public
+      summary: Generate username suggestions
+      description: |
+        Generate unique username suggestions that are verified as available
+        against the users table.
+      operationId: getUsernameSuggestions
+      security: []
+      parameters:
+        - name: count
+          in: query
+          required: false
+          description: Number of suggestions to return (1-20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 1
+      responses:
+        '200':
+          description: Username suggestions generated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsernameSuggestionsResponse'
+              examples:
+                default:
+                  summary: One suggestion
+                  value:
+                    suggestions:
+                      - "ActiveApple-1234"
+                    count: 1
+                multiple:
+                  summary: Multiple suggestions
+                  value:
+                    suggestions:
+                      - "ActiveApple-1234"
+                      - "BraveBerry-8891"
+                    count: 2
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/v1/users/{userId}:
+    get:
+      tags:
+        - Internal
+      summary: Get user details (internal)
+      description: |
+        Service-to-service endpoint. Returns a projected subset of user data
+        (email, settings). Requires AWS IAM (SigV4) authentication —
+        not accessible from the public internet.
+      operationId: getInternalUser
+      security:
+        - AWS_IAM: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User details retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - user
+                properties:
+                  user:
+                    $ref: '#/components/schemas/InternalUserDetails'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/users/{userId}/user-devices/{installationId}:
+    get:
+      tags:
+        - Users
+      summary: Get a registered device
+      description: Retrieve a single device registration record. Users can only access their own devices.
+      operationId: getUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      responses:
+        '200':
+          description: Device retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - device
+                properties:
+                  device:
+                    $ref: '#/components/schemas/UserDeviceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Users
+      summary: Register or update a device
+      description: |
+        Registers a device for push notifications. If a device with the same `userId` + `installationId`
+        already exists it is fully overwritten (upsert). Call this on each app launch or whenever the
+        push token changes.
+      operationId: registerUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+            examples:
+              ios:
+                summary: iOS device registration
+                value:
+                  token: "apns-device-token-abc123"
+                  platform: "ios"
+              android:
+                summary: Android device registration
+                value:
+                  token: "fcm-device-token-xyz789"
+                  platform: "android"
+      responses:
+        '204':
+          description: Device registered or updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - Users
+      summary: Update a device capability state
+      description: |
+        Partially updates a user device record. This is intended for app lifecycle sync
+        when OS-level notification permission changes.
+      operationId: updateUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserDeviceRequest'
+            examples:
+              disable:
+                summary: Device notifications disabled at OS level
+                value:
+                  notificationsEnabled: false
+              enable:
+                summary: Device notifications re-enabled
+                value:
+                  notificationsEnabled: true
+      responses:
+        '200':
+          description: Device updated successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - device
+                properties:
+                  device:
+                    $ref: '#/components/schemas/UserDeviceRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Users
+      summary: Unregister a device
+      description: |
+        Removes a device from push notification delivery. Users can only unregister their own devices.
+        Returns 204 even if the device was not found (idempotent).
+      operationId: unregisterUserDevice
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InstallationId'
+      responses:
+        '204':
+          description: Device unregistered successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /hello:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Public health check endpoint. No authentication required.
+      operationId: helloWorld
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "hello user service"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase JWT token
+    AWS_IAM:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: AWS IAM (SigV4) authentication for service-to-service calls
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Unique user identifier (Firebase UID)
+      schema:
+        type: string
+    InstallationId:
+      name: installationId
+      in: path
+      required: true
+      description: Unique identifier for the device installation (e.g. UUID generated on first app launch)
+      schema:
+        type: string
+
+  schemas:
+    UserType:
+      type: string
+      enum:
+        - Organizer
+        - Host
+        - Volunteer
+        - Neighbor
+      description: User role in the community fridge network
+
+    Settings:
+      type: object
+      properties:
+        emailNotificationEnabled:
+          type: boolean
+          description: Enable email notifications
+          default: false
+        geofenceEnabled:
+          type: boolean
+          description: Enable geofence notifications
+          default: false
+      additionalProperties: false
+
+    User:
+      type: object
+      required:
+        - userId
+        - userType
+        - points
+        - settings
+        - createdAt
+        - lastUpdated
+        - lastLoginAt
+      properties:
+        userId:
+          type: string
+          description: Unique user identifier (Firebase UID)
+        userType:
+          $ref: '#/components/schemas/UserType'
+        username:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: |
+            Username for the user.
+            Must be 3-30 characters, containing only letters, numbers, underscores, and hyphens.
+          example: "mariame_kaba"
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: User's email address
+          example: "mariame@example.com"
+        phoneNumber:
+          type: string
+          nullable: true
+          minLength: 10
+          maxLength: 15
+          description: |
+            User's phone number with optional formatting.
+            Must contain 10-15 digits - formatting characters will be removed
+          example: "+1 (555) 123-4567"
+        zipcode:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 10
+          description: User's postal/zip code (international format)
+          example: "12345"
+        points:
+          type: integer
+          description: User reward points
+          default: 0
+          example: 100
+        settings:
+          $ref: '#/components/schemas/Settings'
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Last profile update timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+        lastLoginAt:
+          type: string
+          format: date-time
+          description: Last login timestamp (ISO 8601)
+          example: "2024-03-20T14:22:00.000Z"
+
+    CreateUserRequest:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          description: Firebase UID (must match authenticated user)
+          pattern: '^\S+$'
+          example: "firebase-user-123"
+        username:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Username containing only letters, numbers, underscores, and hyphens
+          example: "mariame_kaba"
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Valid email address
+          example: "mariame@example.com"
+        phoneNumber:
+          type: string
+          nullable: true
+          minLength: 10
+          maxLength: 20
+          description: Phone number (10-15 digits with optional formatting)
+          example: "+1 (555) 123-4567"
+        zipcode:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9\s\-]+$'
+          description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
+          example: "12345"
+        settings:
+          $ref: '#/components/schemas/Settings'
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        userType:
+          $ref: '#/components/schemas/UserType'
+        username:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Username containing only letters, numbers, underscores, and hyphens
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Valid email address
+        phoneNumber:
+          type: string
+          nullable: true
+          minLength: 10
+          maxLength: 20
+          description: Phone number (10-15 digits)
+        zipcode:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9\s\-]+$'
+          description: Postal/zip code (3-10 characters, alphanumeric with spaces and hyphens)
+        points:
+          type: integer
+        settings:
+          $ref: '#/components/schemas/Settings'
+        lastLoginAt:
+          type: string
+          format: date-time
+      minProperties: 1
+
+    InternalUserDetails:
+      type: object
+      description: Projected user data returned by the internal endpoint
+      properties:
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: User's email address
+        settings:
+          $ref: '#/components/schemas/Settings'
+
+    DevicePlatform:
+      type: string
+      enum:
+        - ios
+        - android
+        - web
+        - unknown
+      description: Device operating system / platform
+
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: Push notification token (APNs, FCM, etc.)
+          example: "apns-device-token-abc123"
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+      additionalProperties: false
+
+    UpdateUserDeviceRequest:
+      type: object
+      properties:
+        notificationsEnabled:
+          type: boolean
+          description: Whether this device can currently receive push notifications
+        invalidAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional timestamp for marking a token invalid
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: Last client sync timestamp (ISO 8601)
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last successful delivery timestamp (ISO 8601)
+      minProperties: 1
+      additionalProperties: false
+
+    UserDeviceRecord:
+      type: object
+      required:
+        - userId
+        - installationId
+        - token
+        - notificationsEnabled
+        - createdAt
+        - lastSeenAt
+      properties:
+        userId:
+          type: string
+          description: Firebase UID of the device owner
+        installationId:
+          type: string
+          description: Unique installation identifier
+        token:
+          type: string
+          description: Push notification token
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        notificationsEnabled:
+          type: boolean
+          description: Whether push notifications are enabled for this device
+          default: true
+        createdAt:
+          type: string
+          format: date-time
+          description: When the device was first registered (ISO 8601)
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: Last time a registration request was received for this device (ISO 8601)
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last time a notification was successfully delivered to this device (ISO 8601)
+        invalidAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the token was marked invalid (ISO 8601)
+
+    UserResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+
+    UsernameSuggestionsResponse:
+      type: object
+      required:
+        - suggestions
+        - count
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: Generated usernames that are currently available
+        count:
+          type: integer
+          description: Number of suggestions returned
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            field:
+              type: string
+              description: Field name (for validation errors)
+          additionalProperties: false
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validation:
+              summary: Validation error
+              value:
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Username must be at least 3 characters"
+                  field: "username"
+            emailFormat:
+              summary: Email format validation
+              value:
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid email format"
+                  field: "email"
+            phoneNumber:
+              summary: Phone number validation
+              value:
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Phone number must have at least 10 digits"
+                  field: "phoneNumber"
+            emptyBody:
+              summary: Empty request body
+              value:
+                error:
+                  code: "EMPTY_REQUEST_BODY"
+                  message: "Request body cannot be empty"
+
+    Forbidden:
+      description: Forbidden - User lacks permission
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "User can only access their own user data"
+
+    NotFound:
+      description: User not found
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "ITEM_NOT_FOUND"
+              message: "User with userId 'firebase-user-123' not found"
+
+    Conflict:
+      description: Conflict - resource already exists or write conflict
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            userAlreadyExists:
+              summary: User already exists (POST)
+              value:
+                error:
+                  code: "ITEM_ALREADY_EXISTS"
+                  message: "User with this userId already exists"
+            writeConflict:
+              summary: Concurrent update conflict (PATCH)
+              value:
+                error:
+                  code: "CONCURRENT_MODIFICATION"
+                  message: "Update conflict: the user was modified by another request. Please retry."
+
+    MethodNotAllowed:
+      description: HTTP method not allowed
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "METHOD_NOT_ALLOWED"
+              message: "Method POST not allowed"
+
+    InternalServerError:
+      description: Internal server error
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "INTERNAL_SERVER_ERROR"
+              message: "An unexpected error occurred"

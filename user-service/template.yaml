@@ -1,0 +1,618 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  user-service
+
+  User Service with DynamoDB and HTTP APIs for user management
+
+Globals:
+  Function:
+    Timeout: 60
+    Runtime: python3.13
+    MemorySize: 256
+    Architectures:
+      - x86_64
+    Layers:
+      - !Ref HttpUtilsLayer
+      - !Ref DynamoUtilsLayer
+      - !Ref ValidationUtilsLayer
+      - !Ref UsernameUtilsLayer
+    Environment:
+      Variables:
+        USERS_TABLE: !Sub users_${Environment}
+        USER_DEVICES_TABLE: !Sub user_devices_${Environment}
+        FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
+        DEPLOYMENT_TARGET: !Ref DeploymentTarget
+    LoggingConfig:
+      LogFormat: JSON
+
+Parameters:
+  FirebaseProjectId:
+    Type: String
+    Description: Firebase Project ID for JWT validation
+    Default: "your-firebase-project-id"
+  
+  Environment:
+    Type: String
+    Description: Deployment environment (dev, staging, prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  
+  DeploymentTarget:
+    Type: String
+    Description: Choose between local or AWS deployment
+    Default: aws
+    AllowedValues:
+      - local
+      - aws
+  
+  CFMHostedZoneId:
+    Type: String
+    Description: Route53 Hosted Zone ID for communityfridgefinder.com
+
+Resources:
+  # SSL Certificate for custom domain
+  ApiCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+      DomainValidationOptions:
+        - DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+          HostedZoneId: !Ref CFMHostedZoneId
+      ValidationMethod: DNS
+
+  # HTTP API Custom Domain
+  ApiDomainName:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Sub users-api-${Environment}.communityfridgefinder.com
+      DomainNameConfigurations:
+        - CertificateArn: !Ref ApiCertificate
+          EndpointType: REGIONAL
+
+  # HTTP API (API Gateway v2) - Modern, faster, cheaper
+  UserHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Auth:
+        Authorizers:
+          FirebaseAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub "https://securetoken.google.com/${FirebaseProjectId}"
+              audience:
+                - !Ref FirebaseProjectId
+            IdentitySource: $request.header.Authorization
+        DefaultAuthorizer: FirebaseAuthorizer
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowOrigins:
+          - '*'
+
+  # Internal HTTP API (API Gateway v2) - IAM auth only, for service-to-service calls
+  InternalHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Auth:
+        EnableIamAuthorizer: true
+        DefaultAuthorizer: AWS_IAM
+
+  # DynamoDB Table for Users
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub users_${Environment}
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES  # Capture full item state for delete events
+
+  # DynamoDB Table for User Devices
+  UserDevicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub user_devices_${Environment}
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: installationId
+          AttributeType: S
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: installationId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: token-index
+          KeySchema:
+            - AttributeName: token
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+      BillingMode: PAY_PER_REQUEST
+
+  # Map custom domain to HTTP API
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      DomainName: !Ref ApiDomainName
+      ApiId: !Ref UserHttpApi
+      Stage: !Ref UserHttpApi.Stage
+
+  # Route53 DNS Record for custom domain
+  ApiDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref CFMHostedZoneId
+      Name: !Sub users-api-${Environment}.communityfridgefinder.com
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApiDomainName.RegionalDomainName
+        HostedZoneId: !GetAtt ApiDomainName.RegionalHostedZoneId
+
+  # Shared Lambda Layer: centralized HTTP error responses and status codes
+  HttpUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub http-utils-${Environment}
+      Description: Centralized HTTP error responses and status codes
+      ContentUri: layers/http_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Shared Lambda Layer: field-level validation helpers (username, etc.)
+  ValidationUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub validation-utils-${Environment}
+      Description: Shared field validation helpers
+      ContentUri: layers/validation_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Shared Lambda Layer: DynamoDB client factory (AWS vs LocalStack)
+  DynamoUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub dynamo-utils-${Environment}
+      Description: DynamoDB client factory with LocalStack support
+      ContentUri: layers/dynamo_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Shared Lambda Layer: Username generation utilities
+  UsernameUtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub username-utils-${Environment}
+      Description: Shared username generation utilities
+      ContentUri: layers/username_utils/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+
+  # Health Check Lambda Function (No auth required)
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/hello_world/
+      Handler: hello_world_handler.lambda_handler
+      MemorySize: 128
+      Layers: []
+      Events:
+        HelloWorld:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /hello
+            Method: get
+            Auth:
+              Authorizer: NONE  # Public endpoint for health checks
+
+  # Single Lambda Function to handle all user operations (Protected by Firebase Auth)
+  UserServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_service/
+      Handler: user_service_handler.lambda_handler
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        CreateUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users
+            Method: post
+        GetUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: get
+        UpdateUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: patch
+        DeleteUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}
+            Method: delete
+
+  # Dedicated Lambda for user-device lifecycle routes
+  UserDeviceServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_devices/
+      Handler: user_device_service_handler.lambda_handler
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserDevicesTable
+      Events:
+        GetUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: get
+        PatchUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: patch
+        RegisterUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: post
+        UnregisterUserDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/user-devices/{installationId}
+            Method: delete
+
+  # Username Availability Check Function (Public endpoint, no auth)
+  UsernameCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/username_check/
+      Handler: username_check_handler.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: !Sub "${UsersTable.Arn}/index/username-index"
+      Events:
+        CheckUsername:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/check-username/{username}
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+  # Username Suggestions Function (Public endpoint, no auth)
+  UsernameSuggestionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/username_suggestions/
+      Handler: username_suggestions_handler.lambda_handler
+      MemorySize: 512
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: !Sub "${UsersTable.Arn}/index/username-index"
+      Events:
+        UsernameSuggestions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/username-suggestions
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+  # Internal Lambda Function for service-to-service queries (IAM auth, no Firebase)
+  InternalUserServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/internal_user_service/
+      Handler: internal_user_service_handler.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt UsersTable.Arn
+      Events:
+        GetUserInternal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InternalHttpApi
+            Path: /internal/v1/users/{userId}
+            Method: get
+
+  # Firebase Cleanup Lambda Function (consumes user deletion events)
+  FirebaseUserCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/firebase_user_cleanup/
+      Handler: firebase_user_cleanup_handler.lambda_handler
+      Timeout: 30
+      Layers: []
+      Environment:
+        Variables:
+          FIREBASE_SERVICE_ACCOUNT_SECRET_NAME: !Sub firebase-service-account-${Environment}
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:firebase-service-account-${Environment}*
+      Events:
+        OnUserDeleted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref UserEventBus
+            Pattern:
+              source:
+                - user-service
+              detail-type:
+                - User Deleted
+
+  UserDeviceCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/user_device_cleanup/
+      Handler: user_device_cleanup_handler.lambda_handler
+      Timeout: 30
+      Layers: []
+      Environment:
+        Variables:
+          USER_DEVICES_TABLE: !Ref UserDevicesTable
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:BatchWriteItem
+            Resource:
+              - !GetAtt UserDevicesTable.Arn
+      Events:
+        OnUserDeleted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref UserEventBus
+            Pattern:
+              source:
+                - user-service
+              detail-type:
+                - User Deleted
+
+  # EventBridge Bus for User Service Events
+  UserEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub user-service-events-${Environment}
+
+  # EventBridge Pipe - Stream user deletions to EventBridge
+  UserDeletionPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: !Sub user-deletion-pipe-${Environment}
+      Description: Propagates user deletion events from DynamoDB Stream to EventBridge
+      RoleArn: !GetAtt UserDeletionPipeRole.Arn
+      Source: !GetAtt UsersTable.StreamArn
+      SourceParameters:
+        DynamoDBStreamParameters:
+          StartingPosition: LATEST
+          BatchSize: 10
+          MaximumBatchingWindowInSeconds: 1
+        FilterCriteria:
+          Filters:
+            - Pattern: '{"eventName": ["REMOVE"]}'
+      Target: !GetAtt UserEventBus.Arn
+      TargetParameters:
+        EventBridgeEventBusParameters:
+          DetailType: User Deleted
+          Source: user-service
+        InputTemplate: |
+          {
+            "userId": <$.dynamodb.OldImage.userId.S>,
+            "deletedAt": <$.dynamodb.ApproximateCreationDateTime>
+          }
+      LogConfiguration:
+        Level: ERROR
+        IncludeExecutionData:
+          - ALL
+        CloudwatchLogsLogDestination:
+          LogGroupArn: !GetAtt UserDeletionPipeLogGroup.Arn
+
+  # CloudWatch Log Group for Pipe
+  UserDeletionPipeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/pipes/user-deletion-pipe-${Environment}
+      RetentionInDays: 7
+
+  # IAM Role for EventBridge Pipe
+  UserDeletionPipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub user-deletion-pipe-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pipes.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SourceDynamoDBStreamPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !GetAtt UsersTable.StreamArn
+        - PolicyName: TargetEventBridgePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !GetAtt UserEventBus.Arn
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt UserDeletionPipeLogGroup.Arn
+
+  # CloudWatch Alarm for Pipe failures
+  UserDeletionPipeFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub user-deletion-pipe-failures-${Environment}
+      AlarmDescription: Alert when user deletion pipe fails to process events
+      MetricName: ExecutionFailed
+      Namespace: AWS/Pipes
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: PipeName
+          Value: !Ref UserDeletionPipe
+
+Outputs:
+  UsersTableName:
+    Description: DynamoDB Users Table Name
+    Value: !Ref UsersTable
+
+  UserDevicesTableName:
+    Description: DynamoDB User Devices Table Name
+    Value: !Ref UserDevicesTable
+  
+  CustomDomainUrl:
+    Description: Custom domain URL for the User API
+    Value: !Sub "https://users-api-${Environment}.communityfridgefinder.com"
+  
+  HttpApiEndpoint:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub "https://${UserHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+  
+  HttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref UserHttpApi
+  
+  ApiDomainName:
+    Description: Custom domain name
+    Value: !Ref ApiDomainName
+  
+  CertificateArn:
+    Description: SSL Certificate ARN
+    Value: !Ref ApiCertificate
+  
+  HelloWorldFunctionArn:
+    Description: Hello World Health Check Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn
+  
+  UserServiceFunctionArn:
+    Description: User Service Lambda Function ARN
+    Value: !GetAtt UserServiceFunction.Arn
+
+  UserDeviceServiceFunctionArn:
+    Description: User Device Service Lambda Function ARN
+    Value: !GetAtt UserDeviceServiceFunction.Arn
+  
+  UserEventBusArn:
+    Description: EventBridge Bus ARN for user events (used by other services)
+    Value: !GetAtt UserEventBus.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-EventBusArn
+  
+  UserEventBusName:
+    Description: EventBridge Bus Name for user events
+    Value: !Ref UserEventBus
+    Export:
+      Name: !Sub ${AWS::StackName}-EventBusName
+  
+  UserDeletionPipeArn:
+    Description: EventBridge Pipe ARN for user deletion events
+    Value: !GetAtt UserDeletionPipe.Arn
+
+  InternalUserServiceFunctionArn:
+    Description: Internal User Service Lambda Function ARN (for service-to-service calls)
+    Value: !GetAtt InternalUserServiceFunction.Arn
+
+  FirebaseUserCleanupFunctionArn:
+    Description: Firebase cleanup Lambda Function ARN
+    Value: !GetAtt FirebaseUserCleanupFunction.Arn
+
+  UserDeviceCleanupFunctionArn:
+    Description: User device cleanup Lambda Function ARN
+    Value: !GetAtt UserDeviceCleanupFunction.Arn
+
+  InternalApiBaseUrl:
+    Description: Base URL for internal IAM-authenticated routes
+    Value: !Sub "https://${InternalHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/internal/v1"
+    Export:
+      Name: !Sub ${AWS::StackName}-InternalApiBaseUrl
