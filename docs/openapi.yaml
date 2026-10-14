@@ -207,6 +207,41 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /v1/users/{userId}/username:
+    get:
+      tags:
+        - Public
+      summary: Get username by user ID
+      description: Return only the username associated with a user ID. Authentication is not required.
+      operationId: getUsernameByUserId
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Username retrieved successfully
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - username
+                properties:
+                  username:
+                    type: string
+              example:
+                username: riverstone
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /v1/users/check-username/{username}:
     get:
       tags:

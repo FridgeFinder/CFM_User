@@ -183,6 +183,22 @@
 - **Auth**: Required (Firebase JWT)
 - **Description**: Remove one device registration for the authenticated user.
 
+---
+
+## 9. Get Username by User ID
+**GET** `/v1/users/{userId}/username`
+- **Auth**: Not required (Public endpoint)
+- **Description**: Return only the username associated with a user ID.
+
+**Success Response (200 OK):**
+```json
+{
+  "username": "riverstone"
+}
+```
+
+Returns `404 Not Found` if the user or username does not exist.
+
 **Success Response (204 No Content):**
 ```
 (Empty response body)
