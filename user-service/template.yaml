@@ -360,6 +360,28 @@ Resources:
             Auth:
               Authorizer: NONE
 
+  # Public endpoint returning only a user's username (no Firebase auth)
+  UsernameLookupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/username_lookup/
+      Handler: username_lookup_handler.lambda_handler
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt UsersTable.Arn
+      Events:
+        GetUsername:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref UserHttpApi
+            Path: /v1/users/{userId}/username
+            Method: get
+            Auth:
+              Authorizer: NONE
+
   # Internal Lambda Function for service-to-service queries (IAM auth, no Firebase)
   InternalUserServiceFunction:
     Type: AWS::Serverless::Function
